@@ -7,12 +7,7 @@ description = "A topic-based cross-thread in-memory communication library"
 repository = "https://github.com/arpadav/crosstalk"
 documentation = "https://docs.rs/crosstalk"
 readme = "README.md"
-keywords = ["crosstalk", "crosstalk-macros",
-            "spsc", "spmc", "mpsc", "mpmc",
-            "thread", "multi-thread", "channel", "message", "queue", "distributed",
-            "pubsub", "pub-sub", "publisher", "subscriber", "broadcast", "topic",
-            "ROS", "RabbitMQ", "Kafka", "AMQP", "ZeroMQ", "nats",
-            "flume", "crossbeam"]
+keywords = ["pubsub", "concurrency", "message-queue", "cross-thread", "distributed"]
 categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
 edition = "2021"
 
