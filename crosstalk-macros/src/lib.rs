@@ -1,3 +1,53 @@
+//! # Crosstalk Macros
+//!
+//! This crate provides macros for simplifying communication between threads using the Crosstalk library.
+//!
+//! ## Benchmarks
+//!
+//! The benchmarks module contains functions to benchmark different communication scenarios.
+//!
+//! ## External Dependencies
+//!
+//! This file imports external dependencies such as `quote` and `syn` for code generation and parsing.
+//!
+//! ## Functionality
+//!
+//! This file contains various functions for handling message transmission and reception between publishers and subscribers.
+//! The functions are designed to work efficiently and return when messages are successfully received.
+//! There are also functions for draining messages from subscribers and handling multiple publishers and subscribers.
+//!
+//! ## Constants
+//!
+//! The file defines constants for the number of publishers, subscribers, and messages used in the benchmarks.
+//!
+//! ## Custom Structs
+//!
+//! There are examples of custom structs like `DetectorOutput`, though they are currently commented out for future use.
+//!
+//! ## Topics Enum
+//!
+//! An example enum `TopicZoo` is defined for different topics that can be communicated between threads.
+//!
+//! ## Utility Functions
+//!
+//! Utility functions like `write` and `read` are provided for writing messages to publishers and reading messages from subscribers.
+//!
+//! ## Error Handling
+//!
+//! The code includes error handling for downcasting message types using the `downcast` function.
+//!
+//! ## Benchmarking
+//!
+//! Benchmarks are set up for various communication scenarios to measure performance and efficiency.
+//!
+//! ## Thread Management
+//!
+//! The file manages threads for communication between publishers and subscribers, ensuring messages are received and processed correctly.
+//!
+//! ## License
+//!
+//! This code is licensed under the MIT license.
+
 // --------------------------------------------------
 // external
 // --------------------------------------------------
@@ -23,6 +73,7 @@ use proc_macro::TokenStream;
 use std::collections::HashSet;
 use proc_macro2::TokenStream as TokenStream2;
 
+
 #[derive(Debug)]
 struct NodeField {
     topic: Path,
@@ -38,6 +89,8 @@ impl Parse for NodeField {
         })
     }
 }
+
+
 struct NodeFields(Punctuated<NodeField, Token![,]>);
 impl Parse for NodeFields {
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -53,7 +106,7 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
             let err = crosstalk::Error::PublisherMismatch(std::any::type_name::<D>().into(), std::any::type_name::<#dtype>().into());
             if std::any::TypeId::of::<D>() == std::any::TypeId::of::<#dtype>() {
                 // --------------------------------------------------
-                // get the flume sender
+                // if the datatype matches, get the flume sender to create the publisher
                 // --------------------------------------------------
                 let fsen = match self.senders.contains_key(&topic) {
                     true => {
@@ -69,6 +122,9 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                         sender
                     }
                 };
+                // --------------------------------------------------
+                // create and return publisher
+                // --------------------------------------------------
                 match crosstalk::downcast::<crosstalk::Publisher<D, #tenum>>(Box::new(crosstalk::Publisher::new(fsen, topic))) {
                     Ok(publisher) => Ok(publisher),
                     Err(_e) => { // <-- this should never happen
@@ -77,11 +133,17 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                     }
                 }
             } else {
+                // --------------------------------------------------
+                // if the datatype does not match, return an error
+                // --------------------------------------------------
                 tracing::error!(?err);
                 Err(Box::new(err))
             }
         }
     };
+    // --------------------------------------------------
+    // if arm not specified, use default (_)
+    // --------------------------------------------------
     match case {
         Some(case) => quote! { #case #contents },
         None => quote! { _ #contents }
@@ -95,7 +157,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
             let err = crosstalk::Error::SubscriberMismatch(std::any::type_name::<D>().into(), std::any::type_name::<#dtype>().into());
             if std::any::TypeId::of::<D>() == std::any::TypeId::of::<#dtype>() {
                 // --------------------------------------------------
-                // get the flume receiver
+                // if the datatype matches, get the flume receiver to create the subscriber
                 // --------------------------------------------------
                 let frec = match self.receivers.contains_key(&topic) {
                     true => {
@@ -118,76 +180,59 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                 let (ndist, did, crec) = match self.distributors.contains_key(&topic) {
                     true => {
                         // --------------------------------------------------
-                        // get the distribution
-                        // --------------------------------------------------
-                        let dists = self.distributors.get_mut(&topic).unwrap();
-                        // --------------------------------------------------
                         // create sender / receiver
                         // --------------------------------------------------
-                        // let (sender, receiver) = crossbeam::channel::unbounded::<#dtype>();
                         let (sender, receiver) = flume::unbounded::<#dtype>();
                         // --------------------------------------------------
-                        // get the unique distributor id, increment it
+                        // - get the existing distributors (to add a new sender for forwarding)
+                        // - get a unique distributor id
+                        // - update the number of distributors for the topic
                         // --------------------------------------------------
+                        let dists = self.distributors.get_mut(&topic).unwrap();
                         let did = self.uniq_dist_id_incr.get_mut(&topic).unwrap();
                         *did += 1;
-                        // --------------------------------------------------
-                        // insert distributor
-                        // --------------------------------------------------
                         dists.insert(*did, Box::new(sender));
-                        // --------------------------------------------------
-                        // update number of distributors
-                        // --------------------------------------------------
                         let ndist = dists.len();
                         tracing::debug!("Updating num distributors from {} to {}", self.num_dist_per_topic.get(&topic).unwrap().load(std::sync::atomic::Ordering::SeqCst), ndist.clone());
                         self.num_dist_per_topic.get_mut(&topic).unwrap().store(ndist.clone(), std::sync::atomic::Ordering::SeqCst);
                         // --------------------------------------------------
-                        // set all termination flags to false, if needed
+                        // indicate whether to create a new forwarding thread
                         // --------------------------------------------------
-                        update_threads = ndist > 1; // { self.update_distribution_threads::<D>(&topic) };
-                        // --------------------------------------------------
-                        // return
-                        // --------------------------------------------------
+                        update_threads = ndist > 1;
                         (ndist, did.clone(), receiver)
                     },
                     false => {
                         // --------------------------------------------------
                         // create sender / receiver
                         // --------------------------------------------------
-                        // let (sender, receiver) = crossbeam::channel::unbounded::<#dtype>();
                         let (sender, receiver) = flume::unbounded::<#dtype>();
                         // --------------------------------------------------
-                        // get the unique distributor id
+                        // - set the unique distributor id to 0
+                        // - create a new hashmap of distributors (to add a new sender for forwarding)
+                        // - update the number of distributors for the topic
                         // --------------------------------------------------
                         let did = 0;
                         self.uniq_dist_id_incr.insert(topic, did.clone());
-                        // --------------------------------------------------
-                        // insert distributor
-                        // --------------------------------------------------
                         self.distributors.insert(topic, std::collections::HashMap::new());
                         let dists = self.distributors.get_mut(&topic).unwrap();
                         dists.insert(did.clone(), Box::new(sender));
-                        // --------------------------------------------------
-                        // set number of distributors
-                        // --------------------------------------------------
                         let ndist = dists.len();
                         tracing::debug!("Updating num distributors from <nothing> to {}", ndist.clone());
                         self.num_dist_per_topic.insert(topic, std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(ndist.clone())));
-                        // --------------------------------------------------
-                        // return
-                        // --------------------------------------------------
                         (ndist, did.clone(), receiver)
                     }
                 };
                 // --------------------------------------------------
-                // set all termination flags to false, if needed
+                // kill existing forwarding thread(s)
+                // (which distribute the mp data to individual subscribers)
+                // and create a new forwarding thread
                 // --------------------------------------------------
                 if update_threads {
                     tracing::debug!("Telling distribution threads to kill thread with ndist={}", ndist - 1);
                     self.update_distribution_threads::<D>(&topic, Some(ndist - 1))
                 };
                 // --------------------------------------------------
-                // return
+                // create and return subscriber
                 // --------------------------------------------------
                 match crosstalk::downcast::<crosstalk::Receiver<D>>(Box::new(crosstalk::Receiver::new(frec, self.num_dist_per_topic.get(&topic).unwrap().clone(), crec))) {
                     Ok(rec) => Ok(crosstalk::Subscriber::new(did, rec, topic)),
@@ -197,11 +242,17 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                     }
                 }
             } else {
+                // --------------------------------------------------
+                // if the datatype does not match, return an error
+                // --------------------------------------------------
                 tracing::error!(?err);
                 Err(Box::new(err))
             }
         }
     };
+    // --------------------------------------------------
+    // if arm not specified, use default (_)
+    // --------------------------------------------------
     match case {
         Some(case) => quote! { #case #contents },
         None => quote! { _ #contents }
@@ -236,6 +287,7 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
         .into_iter()
         .collect::<Vec<_>>();
     if unique_enum_names.len() > 1 {
+        // TODO: change this to use crosstalk::Error
         let error_desc = "Multiple Topic Enums found in constructing crosstalk node";
         let error_msg = "Please use only one Enum to represent Topics, and use the absolute path to the Enum (e.g. `TopicEnum::MyTopic` instead of `MyTopic`)";
         panic!("\n{}\nFound:\n{:#?}\n{}", error_desc, unique_enum_names, error_msg);
@@ -311,11 +363,10 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
                         let n = ndist.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |x| Some(x - 1));
                         match n {
                             Ok(n) => match n {
-                                // 0 | 1 => self.set_termination_flag(&topic),
                                 0..=2 => { let _ = self.restart_forwarding(&topic, Some(n)); },
                                 _ => self.update_distribution_threads::<D>(&topic, Some(n)),
                             },
-                            Err(_) => {}
+                            Err(_) => (),
                         }
                     }
                 }
