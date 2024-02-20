@@ -3,11 +3,11 @@ name = "crosstalk-macros"
 version = "0.1.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
-description = "Procedural macros for `crosstalk` — a topic-based cross-thread in-memory communication library"
-repository = "https://github.com/arpadav/crosstalk-macros"
+description = "Procedural macros for crosstalk — a topic-based cross-thread in-memory communication library"
+repository = "https://github.com/arpadav/crosstalk/crosstalk-macros"
 documentation = "https://docs.rs/crosstalk-macros"
 readme = "README.md"
-keywords = ["pubsub", "concurrency", "message-queue", "cross-thread", "distributed"]
+keywords = ["pubsub", "concurrency", "queue", "thread", "distributed"]
 categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
 edition = "2021"
 
