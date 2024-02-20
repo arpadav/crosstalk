@@ -3,11 +3,11 @@ name = "crosstalk"
 version = "0.1.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
-description = "A topic-based cross-thread in-memory communication library"
+description = "An extremely lightweight, topic-based, cross-thread, in-memory communication library"
 repository = "https://github.com/arpadav/crosstalk"
 documentation = "https://docs.rs/crosstalk"
 readme = "README.md"
-keywords = ["pubsub", "concurrency", "queue", "thread", "distributed"]
+keywords = ["thread", "channel", "mpmc", "pubsub", "distributed"]
 categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
 edition = "2021"
 
