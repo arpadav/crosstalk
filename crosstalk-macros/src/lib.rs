@@ -337,7 +337,9 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
     // --------------------------------------------------
     let output: TokenStream2 = quote! {
         {
-
+            
+            #[allow(dead_code)]
+            
             impl crosstalk::PubSub<#enum_master> for crosstalk::UnboundedCommonNode<#enum_master> {
 
                 fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Publisher<D, #enum_master>, Box<dyn std::error::Error>> {
@@ -349,6 +351,18 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
                 fn subscriber<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Subscriber<D, #enum_master>, Box<dyn std::error::Error>> {
                     match topic {
                         #(#sub_arms,)*
+                    }
+                }
+
+                fn participant<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(crosstalk::Publisher<D, #enum_master>, crosstalk::Subscriber<D, #enum_master>), Box<dyn std::error::Error>> {
+                    match self.publisher(topic) {
+                        Ok(publisher) => {
+                            match self.subscriber(topic) {
+                                Ok(subscriber) => Ok((publisher, subscriber)),
+                                Err(err) => Err(err),
+                            }
+                        },
+                        Err(err) => Err(err),
                     }
                 }
             
