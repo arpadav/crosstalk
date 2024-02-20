@@ -1,0 +1,27 @@
+[package]
+name = "crosstalk-macros"
+version = "0.1.0"
+authors = ["Arpad Voros <arpadav@gmail.com>"]
+license = "MIT"
+description = "Procedural macros for `crosstalk` — a topic-based cross-thread in-memory communication library"
+repository = "https://github.com/arpadav/crosstalk-macros"
+documentation = "https://docs.rs/crosstalk-macros"
+readme = "README.md"
+keywords = ["crosstalk", "crosstalk-macros",
+            "spsc", "spmc", "mpsc", "mpmc",
+            "thread", "multi-thread", "channel", "message", "queue", "distributed",
+            "pubsub", "pub-sub", "publisher", "subscriber", "broadcast", "topic",
+            "ROS", "RabbitMQ", "Kafka", "AMQP", "ZeroMQ", "nats",
+            "flume", "crossbeam"]
+categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "*"
+proc-macro2 = "*"
+syn = { version = "*", features = ["extra-traits", "full"] }
