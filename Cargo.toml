@@ -24,12 +24,12 @@ edition = "2021"
 # --------------------------------------------------
 flume = "0.11.0"
 tracing = "0.1.40"
-# crosstalk-macros = "0.1.0"
+crosstalk-macros = "0.1.0"
 
-# --------------------------------------------------
-# local dependencies
-# --------------------------------------------------
-crosstalk-macros = { path = "macros/crosstalk-macros" }
+# # --------------------------------------------------
+# # local dependencies
+# # --------------------------------------------------
+# crosstalk-macros = { path = "macros/crosstalk-macros" }
 
 # --------------------------------------------------
 # dev dependencies
@@ -41,13 +41,13 @@ criterion = { version = "0.5.1", features = ["html_reports"] }
 name = "test"
 harness = false
 
-# --------------------------------------------------
-# all under workspace flag will be generated in docs
-# --------------------------------------------------
-[workspace]
-members = [
-    "macros/crosstalk-macros",
-]
+# # --------------------------------------------------
+# # all under workspace flag will be generated in docs
+# # --------------------------------------------------
+# [workspace]
+# members = [
+#     "macros/crosstalk-macros",
+# ]
 
 [profile.dev]
 opt-level = 0
