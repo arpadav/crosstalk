@@ -17,9 +17,9 @@ edition = "2021"
 # --------------------------------------------------
 # external dependencies
 # --------------------------------------------------
-flume = "0.11.0"
-tracing = "0.1.40"
-crosstalk-macros = "0.1.0"
+flume = "0.11"
+tracing = "0.1"
+crosstalk-macros = "0.1"
 
 # # --------------------------------------------------
 # # local dependencies
@@ -30,7 +30,7 @@ crosstalk-macros = "0.1.0"
 # dev dependencies
 # --------------------------------------------------
 [dev-dependencies]
-criterion = { version = "0.5.1", features = ["html_reports"] }
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bench]]
 name = "test"
