@@ -1,0 +1,56 @@
+[package]
+name = "crosstalk"
+version = "0.1.0"
+authors = ["Arpad Voros <arpadav@gmail.com>"]
+license = "MIT"
+description = "A topic-based cross-thread in-memory communication library"
+repository = "https://github.com/arpadav/crosstalk"
+documentation = "https://docs.rs/crosstalk"
+readme = "README.md"
+keywords = ["crosstalk", "crosstalk-macros",
+            "spsc", "spmc", "mpsc", "mpmc",
+            "thread", "multi-thread", "channel", "message", "queue", "distributed",
+            "pubsub", "pub-sub", "publisher", "subscriber", "broadcast", "topic",
+            "ROS", "RabbitMQ", "Kafka", "AMQP", "ZeroMQ", "nats",
+            "flume", "crossbeam"]
+categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# --------------------------------------------------
+# external dependencies
+# --------------------------------------------------
+flume = "0.11.0"
+tracing = "0.1.40"
+# crosstalk-macros = "0.1.0"
+
+# --------------------------------------------------
+# local dependencies
+# --------------------------------------------------
+crosstalk-macros = { path = "macros/crosstalk-macros" }
+
+# --------------------------------------------------
+# dev dependencies
+# --------------------------------------------------
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+
+[[bench]]
+name = "test"
+harness = false
+
+# --------------------------------------------------
+# all under workspace flag will be generated in docs
+# --------------------------------------------------
+[workspace]
+members = [
+    "macros/crosstalk-macros",
+]
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
