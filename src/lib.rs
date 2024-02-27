@@ -18,6 +18,7 @@ use core::hash::Hash;
 // --------------------------------------------------
 // internal
 // --------------------------------------------------
+// pub use crosstalk_macros::bounded;
 pub use crosstalk_macros::unbounded;
 
 
@@ -136,6 +137,7 @@ where
 }
 
 
+#[derive(Clone)]
 pub struct Publisher<D, T> {
     buf: flume::Sender<D>,
     pub topic: T
@@ -149,6 +151,8 @@ impl<D, T> Publisher<D, T> {
     }
 }
 
+
+#[derive(Clone)]
 pub struct Subscriber<D, T> {
     pub id: usize,
     buf: Receiver<D>,
@@ -185,6 +189,7 @@ impl<D, T> Subscriber<D, T> {
     }
 }
 
+#[derive(Clone)]
 /// Receiver
 /// 
 /// Define a receiver for subscribing messages
@@ -265,7 +270,8 @@ impl std::fmt::Display for Error {
 pub trait PubSub<T> {
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
     fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>>;
-    fn participant<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
+    fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
+    // fn participant<D: 'static>(&mut self, topic: T) -> Result<(), Box<dyn std::error::Error>>;
     fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>);
     fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>);
 }
