@@ -153,6 +153,7 @@ impl<D, T> Publisher<D, T> {
 
 
 #[derive(Clone)]
+// TODO: when deriving clone, this must update the forwarding thread. maybe have to add private reference to parent node?
 pub struct Subscriber<D, T> {
     pub id: usize,
     buf: Receiver<D>,
