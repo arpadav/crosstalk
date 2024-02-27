@@ -354,7 +354,7 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                fn participant<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(crosstalk::Publisher<D, #enum_master>, crosstalk::Subscriber<D, #enum_master>), Box<dyn std::error::Error>> {
+                fn pubsub<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(crosstalk::Publisher<D, #enum_master>, crosstalk::Subscriber<D, #enum_master>), Box<dyn std::error::Error>> {
                     match self.publisher(topic) {
                         Ok(publisher) => {
                             match self.subscriber(topic) {
@@ -365,6 +365,11 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
                         Err(err) => Err(err),
                     }
                 }
+
+                // fn participant<D: 'static>(&mut self, topic: #enum_master) -> Result<(), Box<dyn std::error::Error>> {
+                //     // TODO
+                //     Ok(())
+                // }
             
                 fn delete_publisher<D: 'static>(&mut self, _publisher: crosstalk::Publisher<D, #enum_master>) {}
             
