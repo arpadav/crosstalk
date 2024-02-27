@@ -13,6 +13,8 @@ use std::{
     any::Any,
     collections::HashMap,
 };
+pub use flume;
+pub use tracing;
 use core::hash::Hash;
 
 // --------------------------------------------------
