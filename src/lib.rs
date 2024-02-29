@@ -23,8 +23,41 @@ use core::hash::Hash;
 // pub use crosstalk_macros::bounded;
 pub use crosstalk_macros::unbounded;
 
-
 pub struct UnboundedCommonNode<T> {
+    pub node: InnerUnboundedCommonNode<T>,
+}
+impl <T> UnboundedCommonNode<T> 
+where
+    T: Eq + Hash + Copy + Clone + PartialEq,
+    InnerUnboundedCommonNode<T>: PubSub<T>,
+{
+    pub fn new () -> Self {
+        Self { node: InnerUnboundedCommonNode::<T>::new() }
+    }
+
+    pub fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
+        self.node.publisher(topic)
+    }
+
+    pub fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
+        self.node.subscriber(topic)
+    }
+
+    pub fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
+        self.node.pubsub(topic)
+    }
+
+    pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
+        self.node.delete_publisher(_publisher)
+    }
+
+    pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>) {
+        self.node.delete_subscriber(subscriber)
+    }
+}
+
+
+pub struct InnerUnboundedCommonNode<T> {
     pub senders: HashMap<T, Box<dyn Any + 'static>>,
     pub receivers: HashMap<T, Box<dyn Any + 'static>>,
     pub distributors: HashMap<T, HashMap<usize, Box<dyn Any>>>,
@@ -33,12 +66,13 @@ pub struct UnboundedCommonNode<T> {
     pub termination_chnls: HashMap<T, (flume::Sender<usize>, flume::Receiver<usize>)>,
     pub forwarding_flags: HashMap<T, Arc<AtomicBool>>,
 }
-impl<T> UnboundedCommonNode<T>
+impl<T> InnerUnboundedCommonNode<T>
 where
     T: Eq + Hash + Copy + Clone + PartialEq,
+    InnerUnboundedCommonNode<T>: PubSub<T>,
 {
 
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             senders: HashMap::new(),
             receivers: HashMap::new(),
