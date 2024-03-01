@@ -22,7 +22,7 @@ use core::hash::Hash;
 // --------------------------------------------------
 // pub use crosstalk_macros::bounded;
 pub use crosstalk_macros::init;
-pub use crosstalk_macros::AsCrosstalkTopic;
+pub use crosstalk_macros::AsTopic;
 
 pub struct UnboundedNode<T> {
     pub node: ImplementedUnboundedNode<T>,
@@ -30,8 +30,8 @@ pub struct UnboundedNode<T> {
 
 impl<T> UnboundedNode<T> 
 where
-    // T: CrosstalkTopic,
-    T: Eq + Hash + Copy + Clone + PartialEq,
+    T: CrosstalkTopic,
+    // T: Eq + Hash + Copy + Clone + PartialEq,
     ImplementedUnboundedNode<T>: CrosstalkPubSub<T>,
 {
     #[inline]
@@ -77,8 +77,8 @@ pub struct ImplementedUnboundedNode<T> {
 }
 impl<T> ImplementedUnboundedNode<T>
 where
-    // T: CrosstalkTopic,
-    T: Eq + Hash + Copy + Clone + PartialEq,
+    T: CrosstalkTopic,
+    // T: Eq + Hash + Copy + Clone + PartialEq,
 {
 
     pub fn new() -> Self {

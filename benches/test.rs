@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use std::thread::JoinHandle;
-use crosstalk;
+use crosstalk::AsTopic;
 use criterion::{
     Criterion,
     black_box,
@@ -11,7 +11,8 @@ use criterion::{
 // --------------------------------------------------
 // Example topics enum
 // --------------------------------------------------
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+// #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(AsTopic)]
 enum TopicZoo {
     Topic1,
     // Topic2,
