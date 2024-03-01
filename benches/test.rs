@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use std::thread::JoinHandle;
-use crosstalk::{ self, PubSub };
+use crosstalk;
 use criterion::{
     Criterion,
     black_box,
