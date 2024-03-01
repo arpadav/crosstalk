@@ -56,6 +56,7 @@ use quote::{
     format_ident,
 };
 use syn::{
+    Data,
     Path,
     Type,
     Token,
@@ -63,6 +64,7 @@ use syn::{
         Parse,
         ParseStream,
     },
+    DeriveInput,
     PathArguments,
     GenericArgument,
     parse_macro_input,
@@ -261,7 +263,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
 
 
 #[proc_macro]
-pub fn unbounded(input: TokenStream) -> TokenStream {
+pub fn init(input: TokenStream) -> TokenStream {
     // --------------------------------------------------
     // parse
     // --------------------------------------------------
@@ -337,64 +339,59 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
     // --------------------------------------------------
     let output: TokenStream2 = quote! {
 
-        {
+        #[automatically_derived]
+        impl crosstalk::CrosstalkPubSub<#enum_master> for crosstalk::ImplementedUnboundedNode<#enum_master> {
 
-            // #[allow(dead_code)]
-
-            impl crosstalk::PubSub<#enum_master> for crosstalk::InnerUnboundedCommonNode<#enum_master> {
-
-                fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Publisher<D, #enum_master>, Box<dyn std::error::Error>> {
-                    match topic {
-                        #(#pub_arms,)*
-                    }
+            fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Publisher<D, #enum_master>, Box<dyn std::error::Error>> {
+                match topic {
+                    #(#pub_arms,)*
                 }
+            }
 
-                fn subscriber<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Subscriber<D, #enum_master>, Box<dyn std::error::Error>> {
-                    match topic {
-                        #(#sub_arms,)*
-                    }
+            fn subscriber<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Subscriber<D, #enum_master>, Box<dyn std::error::Error>> {
+                match topic {
+                    #(#sub_arms,)*
                 }
+            }
 
-                fn pubsub<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(crosstalk::Publisher<D, #enum_master>, crosstalk::Subscriber<D, #enum_master>), Box<dyn std::error::Error>> {
-                    match self.publisher(topic) {
-                        Ok(publisher) => {
-                            match self.subscriber(topic) {
-                                Ok(subscriber) => Ok((publisher, subscriber)),
-                                Err(err) => Err(err),
-                            }
-                        },
-                        Err(err) => Err(err),
-                    }
-                }
-
-                // fn participant<D: 'static>(&mut self, topic: #enum_master) -> Result<(), Box<dyn std::error::Error>> {
-                //     // TODO
-                //     Ok(())
-                // }
-            
-                fn delete_publisher<D: 'static>(&mut self, _publisher: crosstalk::Publisher<D, #enum_master>) {}
-            
-                fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: crosstalk::Subscriber<D, #enum_master>) {
-                    let topic = subscriber.topic.clone();
-                    if let Some(dists) = self.distributors.get_mut(&topic) {
-                        dists.remove(&subscriber.id);
-                    }
-                    if let Some(ndist) = self.num_dist_per_topic.get(&topic) {
-                        let n = ndist.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |x| Some(x - 1));
-                        match n {
-                            Ok(n) => match n {
-                                0..=2 => { let _ = self.restart_forwarding(&topic, Some(n)); },
-                                _ => self.update_distribution_threads::<D>(&topic, Some(n)),
-                            },
-                            Err(_) => (),
+            fn pubsub<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(crosstalk::Publisher<D, #enum_master>, crosstalk::Subscriber<D, #enum_master>), Box<dyn std::error::Error>> {
+                match self.publisher(topic) {
+                    Ok(publisher) => {
+                        match self.subscriber(topic) {
+                            Ok(subscriber) => Ok((publisher, subscriber)),
+                            Err(err) => Err(err),
                         }
+                    },
+                    Err(err) => Err(err),
+                }
+            }
+
+            // fn participant<D: 'static>(&mut self, topic: #enum_master) -> Result<(), Box<dyn std::error::Error>> {
+            //     // TODO
+            //     Ok(())
+            // }
+        
+            fn delete_publisher<D: 'static>(&mut self, _publisher: crosstalk::Publisher<D, #enum_master>) {}
+        
+            fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: crosstalk::Subscriber<D, #enum_master>) {
+                let topic = subscriber.topic.clone();
+                if let Some(dists) = self.distributors.get_mut(&topic) {
+                    dists.remove(&subscriber.id);
+                }
+                if let Some(ndist) = self.num_dist_per_topic.get(&topic) {
+                    let n = ndist.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |x| Some(x - 1));
+                    match n {
+                        Ok(n) => match n {
+                            0..=2 => { let _ = self.restart_forwarding(&topic, Some(n)); },
+                            _ => self.update_distribution_threads::<D>(&topic, Some(n)),
+                        },
+                        Err(_) => (),
                     }
                 }
-            };
-
-            crosstalk::UnboundedCommonNode::<#enum_master>::new()
+            }
 
         }
+
     };
 
     // --------------------------------------------------
@@ -403,6 +400,93 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
+
+#[proc_macro_derive(AsCrosstalkTopic)]
+pub fn derive_topic(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    // ensure only dealing with enums
+    if let Data::Enum(_) = &input.data {
+    } else { panic!("CrosstalkTopic can only be derived on enums"); }
+    // TODO: get error from crosstalk errors
+
+    let name = &input.ident;
+
+    let expanded = quote! {
+        #[automatically_derived]
+        impl ::core::clone::Clone for #name {
+            #[inline]
+            fn clone(&self) -> #name { *self }
+        }
+        #[automatically_derived]
+        impl ::core::marker::Copy for #name {}
+        // TODO: impl this once stable
+        // #[automatically_derived]
+        // impl ::core::marker::StructuralPartialEq for #name {}
+        #[automatically_derived]
+        impl ::core::cmp::PartialEq for #name {
+            #[inline]
+            fn eq(&self, other: &#name) -> bool {
+                let __self_tag = ::std::mem::discriminant(self);
+                let __arg1_tag = ::std::mem::discriminant(other);
+                __self_tag == __arg1_tag
+            }
+        }
+        #[automatically_derived]
+        impl ::core::cmp::Eq for #name { }
+        #[automatically_derived]
+        impl ::core::hash::Hash for #name {
+            #[inline]
+            fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) {
+                let __self_tag = ::std::mem::discriminant(self);
+                ::core::hash::Hash::hash(&__self_tag, state)
+            }
+        }
+        #[automatically_derived]
+        impl crosstalk::CrosstalkTopic for #name {}
+    };
+
+    TokenStream::from(expanded)
+}
+
+
+/*
+#[automatically_derived]
+impl ::core::clone::Clone for TopicZoo {
+    #[inline]
+    fn clone(&self) -> TopicZoo {
+        *self
+    }
+}
+#[automatically_derived]
+impl ::core::marker::Copy for TopicZoo {}
+#[automatically_derived]
+impl ::core::marker::StructuralPartialEq for TopicZoo {}
+#[automatically_derived]
+impl ::core::cmp::PartialEq for TopicZoo {
+    #[inline]
+    fn eq(&self, other: &TopicZoo) -> bool {
+        let __self_tag = ::core::intrinsics::discriminant_value(self);
+        let __arg1_tag = ::core::intrinsics::discriminant_value(other);
+        __self_tag == __arg1_tag
+    }
+}
+#[automatically_derived]
+impl ::core::cmp::Eq for TopicZoo {
+    #[inline]
+    #[doc(hidden)]
+    #[coverage(off)]
+    fn assert_receiver_is_total_eq(&self) -> () {}
+}
+#[automatically_derived]
+impl ::core::hash::Hash for TopicZoo {
+    #[inline]
+    fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) -> () {
+        let __self_tag = ::core::intrinsics::discriminant_value(self);
+        ::core::hash::Hash::hash(&__self_tag, state)
+    }
+}
+*/
 
 fn _type2fish(ty: &Type) -> TokenStream2 {
     match ty {

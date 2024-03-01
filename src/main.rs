@@ -2,9 +2,10 @@
 
 use std::thread;
 use std::collections::HashMap;
-use crosstalk;
+use crosstalk::AsCrosstalkTopic;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)] // required by crosstalk
+// #[derive(Clone, Copy, PartialEq, Eq, Hash)] 
+#[derive(AsCrosstalkTopic)] // required by crosstalk
 enum TopicZoo {
     Topic1,
     Topic2,
@@ -13,6 +14,7 @@ enum TopicZoo {
     Topic5,
     Topic6,
 }
+// impl crosstalk::CrosstalkTopic for TopicZoo {}
 // pub use crate::TopicZoo;
 
 #[derive(Clone)] // required by crosstalk
@@ -32,22 +34,24 @@ enum Color {
     Green
 }
 
-fn main() {
-    let mut node = crosstalk::unbounded! {
-        TopicZoo::Topic1 => Vec<u32>,
-        TopicZoo::Topic2 => String,
-        TopicZoo::Topic3 => Vehicle,
-        TopicZoo::Topic4 => HashMap<&str, Vec<Vehicle>>,
-        TopicZoo::Topic5 => Color,
-    };
+crosstalk::init! {
+    TopicZoo::Topic1 => Vec<u32>,
+    TopicZoo::Topic2 => String,
+    TopicZoo::Topic3 => Vehicle,
+    TopicZoo::Topic4 => HashMap<&str, Vec<Vehicle>>,
+    TopicZoo::Topic5 => Color,
     // TopicZoo::Topic6 not included: defaults to String
+}
+
+fn main() {
+    let mut node = crosstalk::UnboundedNode::<TopicZoo>::new();
 
     let (pub0_topic4, sub0_topic4) = node.pubsub(TopicZoo::Topic4).unwrap();
     let pub1_topic4 = pub0_topic4.clone();
     let sub1_topic4 = node.subscriber(TopicZoo::Topic4).unwrap();
 
-    // let pub0_topic5 = node.publisher::<Color>(TopicZoo::Topic5).unwrap();
-    // pub0_topic5.write(Color::Red);
+    let pub0_topic5 = node.publisher::<Color>(TopicZoo::Topic5).unwrap();
+    pub0_topic5.write(Color::Red);
 
     let message = HashMap::from([("my vehicles", vec![
         Vehicle { make: "Nissan".to_string(), model: "Rogue".to_string(), color: Color::Blue, wheels: 4 },

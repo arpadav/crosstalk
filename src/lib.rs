@@ -21,44 +21,52 @@ use core::hash::Hash;
 // internal
 // --------------------------------------------------
 // pub use crosstalk_macros::bounded;
-pub use crosstalk_macros::unbounded;
+pub use crosstalk_macros::init;
+pub use crosstalk_macros::AsCrosstalkTopic;
 
-pub struct UnboundedCommonNode<T> {
-    pub node: InnerUnboundedCommonNode<T>,
+pub struct UnboundedNode<T> {
+    pub node: ImplementedUnboundedNode<T>,
 }
 
-impl<T> UnboundedCommonNode<T> 
+impl<T> UnboundedNode<T> 
 where
+    // T: CrosstalkTopic,
     T: Eq + Hash + Copy + Clone + PartialEq,
-    InnerUnboundedCommonNode<T>: PubSub<T>,
+    ImplementedUnboundedNode<T>: CrosstalkPubSub<T>,
 {
+    #[inline]
     pub fn new () -> Self {
-        Self { node: InnerUnboundedCommonNode::<T>::new() }
+        Self { node: ImplementedUnboundedNode::<T>::new() }
     }
 
+    #[inline]
     pub fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
         self.node.publisher(topic)
     }
 
+    #[inline]
     pub fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
         self.node.subscriber(topic)
     }
 
+    #[inline]
     pub fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
         self.node.pubsub(topic)
     }
 
+    #[inline]
     pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
         self.node.delete_publisher(_publisher)
     }
 
+    #[inline]
     pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>) {
         self.node.delete_subscriber(subscriber)
     }
 }
 
 
-pub struct InnerUnboundedCommonNode<T> {
+pub struct ImplementedUnboundedNode<T> {
     pub senders: HashMap<T, Box<dyn Any + 'static>>,
     pub receivers: HashMap<T, Box<dyn Any + 'static>>,
     pub distributors: HashMap<T, HashMap<usize, Box<dyn Any>>>,
@@ -67,8 +75,9 @@ pub struct InnerUnboundedCommonNode<T> {
     pub termination_chnls: HashMap<T, (flume::Sender<usize>, flume::Receiver<usize>)>,
     pub forwarding_flags: HashMap<T, Arc<AtomicBool>>,
 }
-impl<T> InnerUnboundedCommonNode<T>
+impl<T> ImplementedUnboundedNode<T>
 where
+    // T: CrosstalkTopic,
     T: Eq + Hash + Copy + Clone + PartialEq,
 {
 
@@ -83,31 +92,6 @@ where
             forwarding_flags: HashMap::new(),
         }
     }
-
-    // fn publisher<D: 'static>(&mut self, _topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
-    //     // see crosstalk-macros/src/lib.rs
-    //     unimplemented!()
-    // }
-
-    // fn subscriber<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
-    //     // see crosstalk-macros/src/lib.rs
-    //     unimplemented!()
-    // }
-
-    // fn pubsub<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
-    //     // see crosstalk-macros/src/lib.rs
-    //     unimplemented!()
-    // }
-
-    // fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
-    //     // see crosstalk-macros/src/lib.rs
-    //     unimplemented!()
-    // }
-
-    // fn delete_subscriber<D: Clone + Send + 'static>(&mut self, _subscriber: Subscriber<D, T>) {
-    //     // see crosstalk-macros/src/lib.rs
-    //     unimplemented!()
-    // }
 
     pub fn restart_forwarding(&mut self, topic: &T, ndist: Option<usize>) -> (Arc<AtomicBool>, flume::Receiver<usize>) {
         // --------------------------------------------------
@@ -203,9 +187,12 @@ pub struct Publisher<D, T> {
     pub topic: T
 }
 impl<D, T> Publisher<D, T> {
+    #[inline]
     pub fn new(buf: flume::Sender<D>, topic: T) -> Self {
         Self { buf, topic }
     }
+
+    #[inline]
     pub fn write(&self, sample: D) {
         let _ = self.buf.send(sample);
     }
@@ -220,35 +207,37 @@ pub struct Subscriber<D, T> {
     pub topic: T
 }
 impl<D, T> Subscriber<D, T> {
+    #[inline]
     pub fn new(id: usize, buf: Receiver<D>, topic: T) -> Self {
         Self { id, buf, topic }
     }
     
-    
+    #[inline]
     pub fn read(&self) -> Option<D> {
         self.buf.read()
     }
     
-    
+    #[inline]
     pub fn try_read(&self) -> Option<D> {
         self.buf.try_read()
     }
     
-    
+    #[inline]
     pub fn read_blocking(&self) -> Option<D> {
         self.buf.read_blocking()
     }
     
-    
+    #[inline]
     pub fn read_timeout(&self, timeout: std::time::Duration) -> Option<D> {
         self.buf.read_timeout(timeout)
     }
 
-
+    #[inline]
     pub fn set_timeout(&mut self, timeout: std::time::Duration) {
         self.buf.set_timeout(timeout);
     }
 }
+
 
 #[derive(Clone)]
 /// Receiver
@@ -264,6 +253,7 @@ pub struct Receiver<D> {
     timeout: std::time::Duration,
 }
 impl<D> Receiver<D> {
+    #[inline]
     pub fn new(
         buf: flume::Receiver<D>,
         plen: Arc<AtomicUsize>,
@@ -272,12 +262,12 @@ impl<D> Receiver<D> {
         Self{ buf, plen, pbuf, timeout: std::time::Duration::from_millis(10) }
     }
 
-
+    #[inline]
     pub fn read(&self) -> Option<D> {
         self.read_timeout(self.timeout)
     }
     
-    
+    #[inline]
     pub fn try_read(&self) -> Option<D> {
         match self.plen.load(Ordering::SeqCst) {
             0 => None,
@@ -286,7 +276,7 @@ impl<D> Receiver<D> {
         }
     }
     
-    
+    #[inline]
     pub fn read_blocking(&self) -> Option<D> {
         match self.plen.load(Ordering::SeqCst) {
             0 => None,
@@ -295,7 +285,7 @@ impl<D> Receiver<D> {
         }
     }
     
-    
+    #[inline]
     pub fn read_timeout(&self, timeout: std::time::Duration) -> Option<D> {
         match self.plen.load(Ordering::SeqCst) {
             0 => None,
@@ -304,7 +294,7 @@ impl<D> Receiver<D> {
         }
     }
     
-    
+    #[inline]
     pub fn set_timeout(&mut self, timeout: std::time::Duration) {
         self.timeout = timeout;
     }
@@ -328,8 +318,10 @@ impl std::fmt::Display for Error {
     }
 }
 
-pub trait PubSub<T> {
-    // type Phantom; 
+pub trait CrosstalkTopic: Eq + Hash + Copy + Clone + PartialEq {} // + 'static { }
+// impl CrosstalkTopic for String {}
+
+pub trait CrosstalkPubSub<T> {
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
     fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>>;
     fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
@@ -403,6 +395,7 @@ pub fn forward<D: Clone>(
 }
 
 
+#[inline]
 pub fn downcast<T>(buf: Box<dyn Any + 'static>) -> Result<T, Box<dyn Any>>
 where
     T: 'static,
