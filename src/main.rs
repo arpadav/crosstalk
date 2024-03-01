@@ -13,6 +13,7 @@ enum TopicZoo {
     Topic5,
     Topic6,
 }
+// pub use crate::TopicZoo;
 
 #[derive(Clone)] // required by crosstalk
 #[derive(PartialEq, Debug)]
@@ -41,16 +42,20 @@ fn main() {
     };
     // TopicZoo::Topic6 not included: defaults to String
 
-    let (pub0_topic4, sub0_topic4) = node.pubsub::<HashMap<&str, Vec<Vehicle>>>(TopicZoo::Topic4).unwrap();
+    let (pub0_topic4, sub0_topic4) = node.pubsub(TopicZoo::Topic4).unwrap();
     let pub1_topic4 = pub0_topic4.clone();
-    let sub1_topic4 = node.subscriber::<HashMap<&str, Vec<Vehicle>>>(TopicZoo::Topic4).unwrap();
+    let sub1_topic4 = node.subscriber(TopicZoo::Topic4).unwrap();
+
+    // let pub0_topic5 = node.publisher(TopicZoo::Topic5).unwrap();
 
     let message = HashMap::from([("my vehicles", vec![
         Vehicle { make: "Nissan".to_string(), model: "Rogue".to_string(), color: Color::Blue, wheels: 4 },
         Vehicle { make: "Toyota".to_string(), model: "Prius".to_string(), color: Color::Green, wheels: 4 },
     ])]);
 
-    thread::spawn(move || { pub0_topic4.write(message); });
+    pub0_topic4.write(message);
+
+    // thread::spawn(move || { pub0_topic4.write(message); });
 
     let received_0 = sub0_topic4.read();
     let received_1 = sub1_topic4.read();
