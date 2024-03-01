@@ -336,10 +336,11 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
     // output
     // --------------------------------------------------
     let output: TokenStream2 = quote! {
+
         {
-            
+
             // #[allow(dead_code)]
-            
+
             impl crosstalk::PubSub<#enum_master> for crosstalk::InnerUnboundedCommonNode<#enum_master> {
 
                 fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<crosstalk::Publisher<D, #enum_master>, Box<dyn std::error::Error>> {
@@ -389,7 +390,7 @@ pub fn unbounded(input: TokenStream) -> TokenStream {
                         }
                     }
                 }
-            }
+            };
 
             crosstalk::UnboundedCommonNode::<#enum_master>::new()
 
