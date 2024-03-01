@@ -228,14 +228,15 @@ where
     pthreads.into_iter().for_each(|p| p.join().unwrap());
 }
 
+crosstalk::init! {
+    TopicZoo::Topic1 => String,
+    // TopicZoo::Topic2 => String,
+    // TopicZoo::Topic3 => String,
+    // TopicZoo::Topic4 => String,
+}
 
-fn unode__only_string() -> crosstalk::UnboundedCommonNode<TopicZoo> {
-    crosstalk::unbounded! {
-        TopicZoo::Topic1 => String,
-        // TopicZoo::Topic2 => String,
-        // TopicZoo::Topic3 => String,
-        // TopicZoo::Topic4 => String,
-    }
+fn unode__only_string() -> crosstalk::UnboundedNode<TopicZoo> {
+    crosstalk::UnboundedNode::<TopicZoo>::new()
 }
 
 
