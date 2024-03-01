@@ -30,6 +30,7 @@ pub struct UnboundedCommonNode<T> {
 impl<T> UnboundedCommonNode<T> 
 where
     T: Eq + Hash + Copy + Clone + PartialEq,
+    InnerUnboundedCommonNode<T>: PubSub<T>,
 {
     pub fn new () -> Self {
         Self { node: InnerUnboundedCommonNode::<T>::new() }
@@ -83,25 +84,30 @@ where
         }
     }
 
-    pub fn publisher<D: 'static>(&mut self, _topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
-        unimplemented!()
-    }
+    // fn publisher<D: 'static>(&mut self, _topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
+    //     // see crosstalk-macros/src/lib.rs
+    //     unimplemented!()
+    // }
 
-    pub fn subscriber<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
-        unimplemented!()
-    }
+    // fn subscriber<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
+    //     // see crosstalk-macros/src/lib.rs
+    //     unimplemented!()
+    // }
 
-    pub fn pubsub<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
-        unimplemented!()
-    }
+    // fn pubsub<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
+    //     // see crosstalk-macros/src/lib.rs
+    //     unimplemented!()
+    // }
 
-    pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
-        unimplemented!()
-    }
+    // fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
+    //     // see crosstalk-macros/src/lib.rs
+    //     unimplemented!()
+    // }
 
-    pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, _subscriber: Subscriber<D, T>) {
-        unimplemented!()
-    }
+    // fn delete_subscriber<D: Clone + Send + 'static>(&mut self, _subscriber: Subscriber<D, T>) {
+    //     // see crosstalk-macros/src/lib.rs
+    //     unimplemented!()
+    // }
 
     pub fn restart_forwarding(&mut self, topic: &T, ndist: Option<usize>) -> (Arc<AtomicBool>, flume::Receiver<usize>) {
         // --------------------------------------------------
