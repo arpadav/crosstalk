@@ -2,10 +2,10 @@
 
 use std::thread;
 use std::collections::HashMap;
-use crosstalk::AsCrosstalkTopic;
+use crosstalk::AsTopic;
 
 // #[derive(Clone, Copy, PartialEq, Eq, Hash)] 
-#[derive(AsCrosstalkTopic)] // required by crosstalk
+#[derive(AsTopic)] // required by crosstalk
 enum TopicZoo {
     Topic1,
     Topic2,
@@ -14,8 +14,6 @@ enum TopicZoo {
     Topic5,
     Topic6,
 }
-// impl crosstalk::CrosstalkTopic for TopicZoo {}
-// pub use crate::TopicZoo;
 
 #[derive(Clone)] // required by crosstalk
 #[derive(PartialEq, Debug)]
