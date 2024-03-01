@@ -26,10 +26,10 @@ pub use crosstalk_macros::unbounded;
 pub struct UnboundedCommonNode<T> {
     pub node: InnerUnboundedCommonNode<T>,
 }
-impl <T> UnboundedCommonNode<T> 
+
+impl<T> UnboundedCommonNode<T> 
 where
     T: Eq + Hash + Copy + Clone + PartialEq,
-    InnerUnboundedCommonNode<T>: PubSub<T>,
 {
     pub fn new () -> Self {
         Self { node: InnerUnboundedCommonNode::<T>::new() }
@@ -69,10 +69,9 @@ pub struct InnerUnboundedCommonNode<T> {
 impl<T> InnerUnboundedCommonNode<T>
 where
     T: Eq + Hash + Copy + Clone + PartialEq,
-    InnerUnboundedCommonNode<T>: PubSub<T>,
 {
 
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             senders: HashMap::new(),
             receivers: HashMap::new(),
@@ -84,6 +83,25 @@ where
         }
     }
 
+    pub fn publisher<D: 'static>(&mut self, _topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
+        unimplemented!()
+    }
+
+    pub fn subscriber<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
+        unimplemented!()
+    }
+
+    pub fn pubsub<D: Clone + Send + 'static>(&mut self, _topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
+        unimplemented!()
+    }
+
+    pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
+        unimplemented!()
+    }
+
+    pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, _subscriber: Subscriber<D, T>) {
+        unimplemented!()
+    }
 
     pub fn restart_forwarding(&mut self, topic: &T, ndist: Option<usize>) -> (Arc<AtomicBool>, flume::Receiver<usize>) {
         // --------------------------------------------------
@@ -305,6 +323,7 @@ impl std::fmt::Display for Error {
 }
 
 pub trait PubSub<T> {
+    // type Phantom; 
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
     fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>>;
     fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
