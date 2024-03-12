@@ -4,6 +4,7 @@
 use std::{
     sync::{
         Arc,
+        Mutex,
         atomic::{
             AtomicBool,
             Ordering,
@@ -20,48 +21,77 @@ use core::hash::Hash;
 // --------------------------------------------------
 // internal
 // --------------------------------------------------
-// pub use crosstalk_macros::bounded;
 pub use crosstalk_macros::init;
 pub use crosstalk_macros::AsTopic;
 
+#[derive(Clone)]
 pub struct UnboundedNode<T> {
-    pub node: ImplementedUnboundedNode<T>,
+    pub node: Arc<Mutex<ImplementedUnboundedNode<T>>>,
 }
 
 impl<T> UnboundedNode<T> 
 where
     T: CrosstalkTopic,
-    // T: Eq + Hash + Copy + Clone + PartialEq,
     ImplementedUnboundedNode<T>: CrosstalkPubSub<T>,
 {
     #[inline]
     pub fn new () -> Self {
-        Self { node: ImplementedUnboundedNode::<T>::new() }
+        Self { node: Arc::new(Mutex::new(ImplementedUnboundedNode::<T>::new())) } // ImplementedUnboundedNode::<T>::new() }
     }
 
     #[inline]
     pub fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
-        self.node.publisher(topic)
+        let mut n = self.node.lock().unwrap();
+        n.publisher(topic)
+        // self
+        // .node
+        // .lock()
+        // .unwrap()
+        // .publisher(topic)
     }
 
     #[inline]
     pub fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
-        self.node.subscriber(topic)
+        let mut n = self.node.lock().unwrap();
+        n.subscriber(topic)
+        // self
+        // .node
+        // .lock()
+        // .unwrap()
+        // .subscriber(topic)
     }
 
     #[inline]
     pub fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
-        self.node.pubsub(topic)
+        let mut n = self.node.lock().unwrap();
+        n.pubsub(topic)
+        // self
+        // .node
+        // .lock()
+        // .unwrap()
+        // .pubsub(topic)
     }
 
     #[inline]
     pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
-        self.node.delete_publisher(_publisher)
+        let mut n = self.node.lock().unwrap();
+        n.delete_publisher(_publisher)
+        // self
+        // .node
+        // .lock()
+        // .unwrap()
+        // .delete_publisher(_publisher)
     }
 
     #[inline]
     pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>) {
-        self.node.delete_subscriber(subscriber)
+        let mut n = self.node.lock().unwrap();
+        n.delete_subscriber(subscriber)
+        // self
+        // .node
+        // .lock()
+        // .unwrap()
+        // .delete_subscriber(subscriber)
     }
 }
 
@@ -75,12 +105,15 @@ pub struct ImplementedUnboundedNode<T> {
     pub termination_chnls: HashMap<T, (flume::Sender<usize>, flume::Receiver<usize>)>,
     pub forwarding_flags: HashMap<T, Arc<AtomicBool>>,
 }
+
+// TODO: make this safe?
+unsafe impl<T> Send for ImplementedUnboundedNode<T> {}
+unsafe impl<T> Sync for ImplementedUnboundedNode<T> {}
+
 impl<T> ImplementedUnboundedNode<T>
 where
     T: CrosstalkTopic,
-    // T: Eq + Hash + Copy + Clone + PartialEq,
 {
-
     pub fn new() -> Self {
         Self {
             senders: HashMap::new(),
@@ -199,18 +232,43 @@ impl<D, T> Publisher<D, T> {
 }
 
 
-#[derive(Clone)]
+// #[derive(Clone)]
 // TODO: when deriving clone, this must update the forwarding thread. maybe have to add private reference to parent node?
+// How todo safely? and should re-architect?
+// pub struct Subscriber<'a, D, T> {
 pub struct Subscriber<D, T> {
     pub id: usize,
+    // parent: Arc<Mutex<&'a mut ImplementedUnboundedNode<T>>>,
     buf: Receiver<D>,
     pub topic: T
 }
-impl<D, T> Subscriber<D, T> {
+
+// impl<'a, D, T> Subscriber<'a, D, T>
+impl<D, T> Subscriber<D, T> 
+where
+    // ImplementedUnboundedNode<T>: CrosstalkPubSub<T>,
+    // T: Clone,
+    // D: Clone + Send + 'static
+{
     #[inline]
+    // pub fn new(id: usize, parent: Arc<Mutex<&'a mut ImplementedUnboundedNode<T>>>, buf: Receiver<D>, topic: T) -> Self {
+    //     Self { id, parent, buf, topic }
+    // }
     pub fn new(id: usize, buf: Receiver<D>, topic: T) -> Self {
         Self { id, buf, topic }
     }
+
+    // #[inline]
+    // pub fn clone(&self) -> Self {
+    //     let buf = {
+    //         let mut parent: std::sync::MutexGuard<'_, &'a mut ImplementedUnboundedNode<T>> = self.parent.lock().unwrap();
+    //         let buf: Subscriber<D, T> = parent.subscriber::<D>(self.topic.clone()).unwrap();
+    //         buf.buf
+    //     };
+    //     Self { id: self.id, parent: self.parent.clone(), buf, topic: self.topic.clone() }
+    //     // buf
+    //     // self.parent.lock().unwrap().subscriber::<D>(self.topic.clone()).unwrap()
+    // }
     
     #[inline]
     pub fn read(&self) -> Option<D> {
@@ -318,8 +376,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-pub trait CrosstalkTopic: Eq + Hash + Copy + Clone + PartialEq {} // + 'static { }
-// impl CrosstalkTopic for String {}
+pub trait CrosstalkTopic: Eq + Hash + Copy + Clone + PartialEq {}
 
 pub trait CrosstalkPubSub<T> {
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
