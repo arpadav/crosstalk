@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "An extremely lightweight, topic-based, cross-thread, in-memory communication library"
