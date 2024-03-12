@@ -7,9 +7,9 @@ An extremely lightweight, topic-based (publisher / subscriber model), cross-thre
 
 use std::thread;
 use std::collections::HashMap;
-use crosstalk::{ self, PubSub };
+use crosstalk::AsTopic;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)] // required by crosstalk
+#[derive(AsTopic)] // required for crosstalk topic
 enum TopicZoo {
     Topic1,
     Topic2,
@@ -19,7 +19,7 @@ enum TopicZoo {
     Topic6,
 }
 
-#[derive(Clone)] // required by crosstalk
+#[derive(Clone)] // required for crosstalk data
 #[derive(PartialEq, Debug)]
 struct Vehicle {
     make: String,
@@ -28,7 +28,7 @@ struct Vehicle {
     wheels: u8,
 }
 
-#[derive(Clone)] // required by crosstalk
+#[derive(Clone)] // required for crosstalk data
 #[derive(PartialEq, Debug)]
 enum Color {
     Red,
@@ -36,45 +36,31 @@ enum Color {
     Green
 }
 
+crosstalk::init! {
+    TopicZoo::Topic1 => Vec<u32>,
+    TopicZoo::Topic2 => String,
+    TopicZoo::Topic3 => Vehicle,
+    TopicZoo::Topic4 => HashMap<&str, Vec<Vehicle>>,
+    TopicZoo::Topic5 => Color,
+};
+// TopicZoo::Topic6 not included: defaults to String
+
 fn main() {
-    let mut node = crosstalk::unbounded! {
-        TopicZoo::Topic1 => Vec<u32>,
-        TopicZoo::Topic2 => String,
-        TopicZoo::Topic3 => Vehicle,
-        TopicZoo::Topic4 => HashMap<&str, Vec<Vehicle>>,
-        TopicZoo::Topic5 => Color,
-    };
-    // TopicZoo::Topic6 not included: defaults to String
+    let mut node = crosstalk::UnboundedNode::<TopicZoo>::new();
 
-    let (pub0_topic4, sub0_topic4) = node
-        .participant::<HashMap<&str, Vec<Vehicle>>>(TopicZoo::Topic4)
+    let (pub0_topic5, sub0_topic5) = node
+        .pubsub(TopicZoo::Topic5)
         .unwrap();
-    let sub1_topic4 = node
-        .subscriber::<HashMap<&str, Vec<Vehicle>>>(TopicZoo::Topic4)
+    let sub1_topic5 = node
+        .subscriber(TopicZoo::Topic5)
         .unwrap();
-    
-    let message = HashMap::from([(
-        "my vehicles",
-        vec![
-            Vehicle {
-                make: "Nissan".to_string(),
-                model: "Rogue".to_string(),
-                color: Color::Blue,
-                wheels: 4,
-            },
-            Vehicle {
-                make: "Toyota".to_string(),
-                model: "Prius".to_string(),
-                color: Color::Green,
-                wheels: 4,
-            },
-        ]
-    )]);
 
-    thread::spawn(move || { pub0_topic4.write(message); });
+    let message = Color::Red;
 
-    let received_0 = sub0_topic4.read();
-    let received_1 = sub1_topic4.read();
+    thread::spawn(move || { pub0_topic5.write(message); });
+
+    let received_0 = sub0_topic5.read();
+    let received_1 = sub1_topic5.read();
 
     println!("{:?}", received_0);
     println!("{:?}", received_1);
