@@ -244,6 +244,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                 // --------------------------------------------------
                 match ::crosstalk::downcast::<::crosstalk::Receiver<D>>(Box::new(::crosstalk::Receiver::new(frec, self.num_dist_per_topic.get(&topic).unwrap().clone(), crec))) {
                     Ok(rec) => Ok(::crosstalk::Subscriber::new(did, rec, topic)),
+                    // Ok(rec) => Ok(::crosstalk::Subscriber::new(did, ::std::sync::Arc::new(::std::sync::Mutex::new(self)), rec, topic)),
                     Err(_e) => { // <-- this should never happen
                         ::crosstalk::tracing::error!(?err);
                         Err(Box::new(err))
@@ -455,44 +456,6 @@ pub fn derive_enum_as_topic(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-
-/*
-#[automatically_derived]
-impl ::core::clone::Clone for TopicZoo {
-    #[inline]
-    fn clone(&self) -> TopicZoo {
-        *self
-    }
-}
-#[automatically_derived]
-impl ::core::marker::Copy for TopicZoo {}
-#[automatically_derived]
-impl ::core::marker::StructuralPartialEq for TopicZoo {}
-#[automatically_derived]
-impl ::core::cmp::PartialEq for TopicZoo {
-    #[inline]
-    fn eq(&self, other: &TopicZoo) -> bool {
-        let __self_tag = ::core::intrinsics::discriminant_value(self);
-        let __arg1_tag = ::core::intrinsics::discriminant_value(other);
-        __self_tag == __arg1_tag
-    }
-}
-#[automatically_derived]
-impl ::core::cmp::Eq for TopicZoo {
-    #[inline]
-    #[doc(hidden)]
-    #[coverage(off)]
-    fn assert_receiver_is_total_eq(&self) -> () {}
-}
-#[automatically_derived]
-impl ::core::hash::Hash for TopicZoo {
-    #[inline]
-    fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) -> () {
-        let __self_tag = ::core::intrinsics::discriminant_value(self);
-        ::core::hash::Hash::hash(&__self_tag, state)
-    }
-}
-*/
 
 fn _type2fish(ty: &Type) -> TokenStream2 {
     match ty {
