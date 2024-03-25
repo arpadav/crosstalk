@@ -85,7 +85,6 @@ where
     T: CrosstalkTopic,
 {
     pub fn new(size: usize) -> Self {
-        let create_runtimes = tokio::runtime::Handle::try_current().is_err();
         Self {
             senders: HashMap::new(),
             runtimes: HashMap::new(),
@@ -110,6 +109,11 @@ impl<D, T> Publisher<D, T> {
     #[inline]
     pub fn write(&self, sample: D) {
         let _ = self.buf.send(sample);
+        // let res = self.buf.send(sample);
+        // match res {
+        //     Ok(r) => println!("write: {:?}", r),
+        //     Err(e) => println!("write error: {}", e),
+        // }
     }
 }
 
@@ -177,6 +181,11 @@ where
     pub fn try_read(&mut self) -> Option<D> {
         self.rcvr.try_read()
     }
+
+    #[inline]
+    pub fn try_read_raw(&mut self) -> Option<D> {
+        self.rcvr.try_read_raw()
+    }
     
     #[inline]
     pub fn read_blocking(&mut self) -> Option<D> {
@@ -223,77 +232,98 @@ where
     }
 
     #[inline]
-    fn match_recv_error(&self, result: std::result::Result<D, Box<dyn std::error::Error>>) -> Option<D> {
-        match result {
-            Ok(d) => Some(d),
-            Err(e) => {
-                // TODO: better errors
-                log::error!("Error: {:?}", e);
-                None
+    pub async fn read(&mut self) -> Option<D> {
+        let _guard = match self.rt {
+            Some(ref rt) => Some(rt.enter()),
+            None => None,
+        };
+        loop {
+            match self.buf.recv().await {
+                Ok(res) => return Some(res),
+                Err(e) => match e {
+                    tokio::sync::broadcast::error::RecvError::Lagged(_) => { continue; }
+                    _ => {
+                        // TODO: improve this error
+                        log::error!("Some RecvError: {:?}", e);
+                        return None
+                    }
+                }
             }
         }
-    }
+    }    
 
     #[inline]
-    fn match_try_recv_error(&self, result: std::result::Result<D, Box<dyn std::error::Error>>) -> Option<D> {
-        match result {
-            Ok(d) => Some(d),
-            Err(_) => None,
-        }
-    }
-
-    #[inline]
-    pub async fn read(&mut self) -> Option<D> {
-        match self.rt {
-            Some(ref rt) => {
-                let _guard = rt.enter();
-                let res = self.buf.recv().await;
-                self.match_recv_error(res.boxed())
-            },
-            None => {
-                let res = self.buf.recv().await;
-                self.match_recv_error(res.boxed())
-            },
-        }
+    pub fn try_read(&mut self) -> Option<D> {
+        let _guard = match self.rt {
+            Some(ref rt) => Some(rt.enter()),
+            None => None,
+        };
+        loop {
+            match self.buf.try_recv() {
+                Ok(d) => return Some(d),
+                Err(e) => {
+                    match e {
+                        tokio::sync::broadcast::error::TryRecvError::Lagged(_) => { continue; },
+                        _ => return None,
+                    }
+                },
+            }
+        } 
     }
     
     #[inline]
-    pub fn try_read(&mut self) -> Option<D> {
-        match self.rt {
-            Some(ref rt) => {
-                let _guard = rt.enter();
-                let res = self.buf.try_recv();
-                self.match_try_recv_error(res.boxed())
-            },
-            None => {
-                let res = self.buf.try_recv();
-                self.match_try_recv_error(res.boxed())
-            },
+    pub fn try_read_raw(&mut self) -> Option<D> {
+        let _guard = match self.rt {
+            Some(ref rt) => Some(rt.enter()),
+            None => None,
+        };
+        let res = self.buf.try_recv();
+        match res {
+            Ok(d) => Some(d),
+            Err(_) => None,
         }
     }
     
     #[inline]
     pub fn read_blocking(&mut self) -> Option<D> {
-        match self.rt {
-            Some(ref rt) => {
-                let _guard = rt.enter();
-                let res = self.buf.blocking_recv();
-                self.match_recv_error(res.boxed())
-            },
-            None => {
-                let res = self.buf.blocking_recv();
-                self.match_recv_error(res.boxed())
+        let _guard = match self.rt {
+            Some(ref rt) => Some(rt.enter()),
+            None => None,
+        };
+        loop {
+            match self.buf.blocking_recv() {
+                Ok(res) => return Some(res),
+                Err(e) => match e {
+                    tokio::sync::broadcast::error::RecvError::Lagged(_) => { continue; }
+                    _ => {
+                        // TODO: improve this error
+                        log::error!("Some RecvError: {:?}", e);
+                        return None
+                    }
+                }
             }
         }
     }
     
     #[inline]
     pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
-        match self.rt {
-            Some(ref rt) => {
-                let _guard = rt.enter();
+        let _guard = match self.rt {
+            Some(ref rt) => Some(rt.enter()),
+            None => None,
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(_) => {
                 match tokio::time::timeout(timeout, self.buf.recv()).await {
-                    Ok(res) => self.match_recv_error(res.boxed()),
+                    Ok(res) => {
+                        match res {
+                            Ok(res) => Some(res),
+                            Err(e) => {
+                                // TODO: improve this error
+                                log::error!("Some RecvError: {:?}", e);
+                                None
+                            }
+                        }
+                    },
                     Err(e) => {
                         // TODO: improve this error
                         log::error!("Timeout error occurred: {:?}", e);
@@ -301,25 +331,11 @@ where
                     }
                 }
             },
-            None => {
-                match tokio::runtime::Handle::try_current() {
-                    Ok(_) => {
-                        match tokio::time::timeout(timeout, self.buf.recv()).await {
-                            Ok(res) => self.match_recv_error(res.boxed()),
-                            Err(e) => {
-                                // TODO: improve this error
-                                log::error!("Timeout error occurred: {:?}", e);
-                                None
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        // TODO: improve this error
-                        log::error!("Tokio runtime is said to be running, but can not find current handle: {:?}", e);
-                        None
-                    },
-                }
-            }
+            Err(e) => {
+                // TODO: improve this error
+                log::error!("Tokio runtime is said to be running, but can not find current handle: {:?}", e);
+                None
+            },
         }
     }
     
