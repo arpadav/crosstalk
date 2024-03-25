@@ -130,7 +130,7 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                         let rt = match ::crosstalk::external::runtime::Runtime::new() {
                             Ok(rt) => ::std::sync::Arc::new(rt),
                             Err(err) => {
-                                ::crosstalk::external::tracing::error!(?err);
+                                ::crosstalk::external::log::error!("{}", err);
                                 return Err(Box::new(err))
                             }
                         };
@@ -144,7 +144,7 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                 match ::crosstalk::downcast::<::crosstalk::Publisher<D, #tenum>>(Box::new(::crosstalk::Publisher::new(tsen, topic))) {
                     Ok(publisher) => Ok(publisher),
                     Err(_e) => { // <-- this should never happen
-                        ::crosstalk::external::tracing::error!(?err);
+                        ::crosstalk::external::log::error!("{}", err);
                         Err(Box::new(err))
                     }
                 }
@@ -152,7 +152,7 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                 // --------------------------------------------------
                 // if the datatype does not match, return an error
                 // --------------------------------------------------
-                ::crosstalk::external::tracing::error!(?err);
+                ::crosstalk::external::log::error!("{}", err);
                 Err(Box::new(err))
             }
         }
@@ -196,7 +196,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                         let rt = match ::crosstalk::external::runtime::Runtime::new() {
                             Ok(rt) => ::std::sync::Arc::new(rt),
                             Err(err) => {
-                                ::crosstalk::external::tracing::error!(?err);
+                                ::crosstalk::external::log::error!("{}", err);
                                 return Err(Box::new(err))
                             }
                         };
@@ -211,7 +211,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                     Ok(sender) => Ok(::crosstalk::Subscriber::new(topic, None, ::std::sync::Arc::new(sender), rt)),
                     // Ok(rec) => Ok(::crosstalk::Subscriber::new(did, ::std::sync::Arc::new(::std::sync::Mutex::new(self)), rec, topic)),
                     Err(_e) => { // <-- this should never happen
-                        ::crosstalk::external::tracing::error!(?err);
+                        ::crosstalk::external::log::error!("{}", err);
                         Err(Box::new(err))
                     }
                 }
@@ -219,7 +219,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                 // --------------------------------------------------
                 // if the datatype does not match, return an error
                 // --------------------------------------------------
-                ::crosstalk::external::tracing::error!(?err);
+                ::crosstalk::external::log::error!("{}", err);
                 Err(Box::new(err))
             }
         }
