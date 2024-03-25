@@ -127,14 +127,16 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                         // size is defined during crosstalk::BoundedNode::new(size)
                         let (sender, _) =  ::crosstalk::external::broadcast::channel::<#dtype>(self.size);
                         self.senders.insert(topic, Box::new(sender.clone()));
-                        let rt = match ::crosstalk::external::runtime::Runtime::new() {
-                            Ok(rt) => ::std::sync::Arc::new(rt),
-                            Err(err) => {
-                                ::crosstalk::external::log::error!("{}", err);
-                                return Err(Box::new(err))
-                            }
-                        };
-                        self.runtimes.insert(topic, rt);
+                        if self.create_runtimes {
+                            let rt = match ::crosstalk::external::runtime::Runtime::new() {
+                                Ok(rt) => ::std::sync::Arc::new(rt),
+                                Err(err) => {
+                                    ::crosstalk::external::log::error!("{}", err);
+                                    return Err(Box::new(err))
+                                }
+                            };
+                            self.runtimes.insert(topic, rt);
+                        }
                         sender
                     }
                 };
@@ -179,30 +181,38 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                 // --------------------------------------------------
                 // if the datatype matches, get the flume receiver to create the subscriber
                 // --------------------------------------------------
-                let (tsen, rt) = match self.senders.contains_key(&topic) {
+                let tsen = match self.senders.contains_key(&topic) {
                     true => {
                         let tsen_ = ::crosstalk::downcast::<
                                     ::crosstalk::external::broadcast::Sender<#dtype>
                                     >(self.senders.remove(&topic).unwrap()).unwrap();
                         let tsen = tsen_.clone();
                         self.senders.insert(topic, Box::new(tsen_));
-                        let rt = self.runtimes.get(&topic).unwrap().clone();
-                        (tsen, rt)
+                        tsen
                     },
                     false => {
                         // size is defined during crosstalk::BoundedNode::new(size)
                         let (sender, _) =  ::crosstalk::external::broadcast::channel::<#dtype>(self.size);
                         self.senders.insert(topic, Box::new(sender.clone()));
-                        let rt = match ::crosstalk::external::runtime::Runtime::new() {
-                            Ok(rt) => ::std::sync::Arc::new(rt),
-                            Err(err) => {
-                                ::crosstalk::external::log::error!("{}", err);
-                                return Err(Box::new(err))
-                            }
-                        };
-                        self.runtimes.insert(topic, rt.clone());
-                        (sender, rt)
+                        sender
                     }
+                };
+                let rt = match self.create_runtimes {
+                    true => match self.runtimes.get(&topic) {
+                            Some(rt) => Some(rt.clone()),
+                            None => {
+                                let rt = match ::crosstalk::external::runtime::Runtime::new() {
+                                    Ok(rt) => ::std::sync::Arc::new(rt),
+                                    Err(err) => {
+                                        ::crosstalk::external::log::error!("{}", err);
+                                        return Err(Box::new(err))
+                                    }
+                                };
+                                self.runtimes.insert(topic, rt.clone());
+                                Some(rt)
+                            }
+                        },
+                    false => None,
                 };
                 // --------------------------------------------------
                 // create and return subscriber
