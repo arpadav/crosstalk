@@ -169,14 +169,9 @@ where
             rt: self.rt.clone(),
         }
     }
-    
-    #[inline]
-    pub async fn read_async(&mut self) -> Option<D> {
-        self.rcvr.read_async().await
-    }
 
-    pub fn read(&mut self) -> Option<D> {
-        self.rcvr.read()
+    pub async fn read(&mut self) -> Option<D> {
+        self.rcvr.read().await
     }
     
     #[inline]
@@ -190,8 +185,8 @@ where
     }
     
     #[inline]
-    pub fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
-        self.rcvr.read_timeout(timeout)
+    pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
+        self.rcvr.read_timeout(timeout).await
     }
 
     #[inline]
@@ -229,7 +224,7 @@ where
     }
 
     #[inline]
-    fn match_result(&self, result: std::result::Result<D, Box<dyn std::error::Error>>) -> Option<D> {
+    fn match_recv_error(&self, result: std::result::Result<D, Box<dyn std::error::Error>>) -> Option<D> {
         match result {
             Ok(d) => Some(d),
             Err(e) => {
@@ -241,23 +236,26 @@ where
     }
 
     #[inline]
-    pub async fn read_async(&mut self) -> Option<D> {
-        match self.rt {
-            Some(ref rt) => {
-                let _guard = rt.enter();
-                let res = self.buf.recv().await;
-                self.match_result(res.boxed())
-            },
-            None => {
-                let res = self.buf.recv().await;
-                self.match_result(res.boxed())
-            },
+    fn match_try_recv_error(&self, result: std::result::Result<D, Box<dyn std::error::Error>>) -> Option<D> {
+        match result {
+            Ok(d) => Some(d),
+            Err(_) => None,
         }
     }
 
     #[inline]
-    pub fn read(&mut self) -> Option<D> {
-        self.read_timeout(self.timeout)
+    pub async fn read(&mut self) -> Option<D> {
+        match self.rt {
+            Some(ref rt) => {
+                let _guard = rt.enter();
+                let res = self.buf.recv().await;
+                self.match_recv_error(res.boxed())
+            },
+            None => {
+                let res = self.buf.recv().await;
+                self.match_recv_error(res.boxed())
+            },
+        }
     }
     
     #[inline]
@@ -266,11 +264,11 @@ where
             Some(ref rt) => {
                 let _guard = rt.enter();
                 let res = self.buf.try_recv();
-                self.match_result(res.boxed())
+                self.match_try_recv_error(res.boxed())
             },
             None => {
                 let res = self.buf.try_recv();
-                self.match_result(res.boxed())
+                self.match_try_recv_error(res.boxed())
             },
         }
     }
@@ -281,22 +279,22 @@ where
             Some(ref rt) => {
                 let _guard = rt.enter();
                 let res = self.buf.blocking_recv();
-                self.match_result(res.boxed())
+                self.match_recv_error(res.boxed())
             },
             None => {
                 let res = self.buf.blocking_recv();
-                self.match_result(res.boxed())
+                self.match_recv_error(res.boxed())
             }
         }
     }
     
     #[inline]
-    pub fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
+    pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
         match self.rt {
             Some(ref rt) => {
                 let _guard = rt.enter();
-                match rt.block_on(tokio::time::timeout(timeout, self.buf.recv())) {
-                    Ok(res) => self.match_result(res.boxed()),
+                match tokio::time::timeout(timeout, self.buf.recv()).await {
+                    Ok(res) => self.match_recv_error(res.boxed()),
                     Err(e) => {
                         // TODO: improve this error
                         log::error!("Timeout error occurred: {:?}", e);
@@ -306,11 +304,9 @@ where
             },
             None => {
                 match tokio::runtime::Handle::try_current() {
-                    Ok(ref handle) => {
-                        match handle.block_on(async {
-                            tokio::time::timeout(timeout, self.buf.recv()).await
-                        }) {
-                            Ok(res) => self.match_result(res.boxed()),
+                    Ok(_) => {
+                        match tokio::time::timeout(timeout, self.buf.recv()).await {
+                            Ok(res) => self.match_recv_error(res.boxed()),
                             Err(e) => {
                                 // TODO: improve this error
                                 log::error!("Timeout error occurred: {:?}", e);
