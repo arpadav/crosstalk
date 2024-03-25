@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk-macros"
-version = "0.1.4"
+version = "0.2.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "Procedural macros for crosstalk — An extremely lightweight, topic-based, cross-thread, in-memory communication library"
