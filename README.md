@@ -59,8 +59,8 @@ fn main() {
 
     thread::spawn(move || { pub0_topic5.write(message); });
 
-    let received_0 = sub0_topic5.read();
-    let received_1 = sub1_topic5.read();
+    let received_0 = sub0_topic5.read_blocking();
+    let received_1 = sub1_topic5.read_blocking();
 
     println!("{:?}", received_0);
     println!("{:?}", received_1);
