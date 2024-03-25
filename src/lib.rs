@@ -7,8 +7,8 @@ use std::{
         Mutex,
     },
     any::Any,
-    collections::HashMap,
 };
+use hashbrown::HashMap;
 use core::hash::Hash;
 
 // --------------------------------------------------
