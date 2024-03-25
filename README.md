@@ -1,6 +1,6 @@
 # crosstalk
 
-An extremely lightweight, topic-based (publisher / subscriber model), cross-thread, in-memory communication library using [flume](https://crates.io/crates/flume).
+A lightweight wrapper of [tokio](https://crates.io/crates/tokio)'s bounded broadcasting channels to enable topic-based (publisher/subscriber) paradigm of mpmc communication.
 
 ```rust
 #![allow(dead_code)]
@@ -46,7 +46,7 @@ crosstalk::init! {
 // TopicZoo::Topic6 not included: defaults to String
 
 fn main() {
-    let mut node = crosstalk::UnboundedNode::<TopicZoo>::new();
+    let mut node = crosstalk::BoundedNode::<TopicZoo>::new(1024);
 
     let (pub0_topic5, sub0_topic5) = node
         .pubsub(TopicZoo::Topic5)
@@ -70,7 +70,7 @@ fn main() {
 
 ## Why crosstalk?
 
-All mpmc libraries focuses on a single FIFO channel, rather than broadcasting using topics; similar to any other pub/sub model. Crosstalk is used to dynamically create and destroy publishers and subscribers at runtime, across multiple threads. Crosstalk is a lightweight wrapper of [flume](https://crates.io/crates/flume), which does all the heavy lifting. Realistically crosstalk could wrap any mpmc library, but we decided on flume due to its simplicity, flexibility, and performance with handling unbounded channels.
+Most mpmc libraries focuses on a single FIFO channel, rather than broadcasting. [Tokio](https://crates.io/crates/tokio) is one of the only established mpmc / async libraries that supports broadcasting, so the motivation was to wrap `tokio`'s channels with a topic-based paradigm, similar to ROS, for ease of use. Crosstalk acts as a lightweight wrapper of `tokio::sync::broadcast`, correlating topic enums with datatypes and senders/receivers. Crosstalk can be used to dynamically create and destroy publishers and subscribers at runtime, across multiple threads. 
 
 ## License
 
