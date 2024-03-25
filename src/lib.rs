@@ -5,223 +5,102 @@ use std::{
     sync::{
         Arc,
         Mutex,
-        atomic::{
-            AtomicBool,
-            Ordering,
-            AtomicUsize,
-        },
     },
     any::Any,
     collections::HashMap,
 };
-pub use flume;
-pub use tracing;
 use core::hash::Hash;
 
 // --------------------------------------------------
 // internal
 // --------------------------------------------------
+pub mod external;
 pub use crosstalk_macros::init;
 pub use crosstalk_macros::AsTopic;
 
 #[derive(Clone)]
-pub struct UnboundedNode<T> {
-    pub node: Arc<Mutex<ImplementedUnboundedNode<T>>>,
+pub struct BoundedNode<T> {
+    pub node: Arc<Mutex<ImplementedBoundedNode<T>>>,
+    pub size: usize,
 }
 
-impl<T> UnboundedNode<T> 
+impl<T> BoundedNode<T> 
 where
     T: CrosstalkTopic,
-    ImplementedUnboundedNode<T>: CrosstalkPubSub<T>,
+    ImplementedBoundedNode<T>: CrosstalkPubSub<T>,
 {
     #[inline]
-    pub fn new () -> Self {
-        Self { node: Arc::new(Mutex::new(ImplementedUnboundedNode::<T>::new())) } // ImplementedUnboundedNode::<T>::new() }
+    pub fn new(size: usize) -> Self {
+        Self {
+            node: Arc::new(Mutex::new(ImplementedBoundedNode::<T>::new(size.clone()))),
+            size,
+        }
     }
 
     #[inline]
     pub fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>> {
         let mut n = self.node.lock().unwrap();
         n.publisher(topic)
-        // self
-        // .node
-        // .lock()
-        // .unwrap()
-        // .publisher(topic)
     }
 
     #[inline]
     pub fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>> {
         let mut n = self.node.lock().unwrap();
         n.subscriber(topic)
-        // self
-        // .node
-        // .lock()
-        // .unwrap()
-        // .subscriber(topic)
     }
 
     #[inline]
     pub fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>> {
         let mut n = self.node.lock().unwrap();
         n.pubsub(topic)
-        // self
-        // .node
-        // .lock()
-        // .unwrap()
-        // .pubsub(topic)
     }
 
     #[inline]
     pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
         let mut n = self.node.lock().unwrap();
         n.delete_publisher(_publisher)
-        // self
-        // .node
-        // .lock()
-        // .unwrap()
-        // .delete_publisher(_publisher)
     }
 
     #[inline]
     pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>) {
         let mut n = self.node.lock().unwrap();
         n.delete_subscriber(subscriber)
-        // self
-        // .node
-        // .lock()
-        // .unwrap()
-        // .delete_subscriber(subscriber)
     }
 }
 
 
-pub struct ImplementedUnboundedNode<T> {
+pub struct ImplementedBoundedNode<T> {
     pub senders: HashMap<T, Box<dyn Any + 'static>>,
-    pub receivers: HashMap<T, Box<dyn Any + 'static>>,
-    pub distributors: HashMap<T, HashMap<usize, Box<dyn Any>>>,
-    pub num_dist_per_topic: HashMap<T, Arc<AtomicUsize>>,
-    pub uniq_dist_id_incr: HashMap<T, usize>,
-    pub termination_chnls: HashMap<T, (flume::Sender<usize>, flume::Receiver<usize>)>,
-    pub forwarding_flags: HashMap<T, Arc<AtomicBool>>,
+    pub runtimes: HashMap<T, Arc<tokio::runtime::Runtime>>,
+    pub size: usize,
 }
 
 // TODO: make this safe?
-unsafe impl<T> Send for ImplementedUnboundedNode<T> {}
-unsafe impl<T> Sync for ImplementedUnboundedNode<T> {}
+unsafe impl<T> Send for ImplementedBoundedNode<T> {}
+unsafe impl<T> Sync for ImplementedBoundedNode<T> {}
 
-impl<T> ImplementedUnboundedNode<T>
+impl<T> ImplementedBoundedNode<T>
 where
     T: CrosstalkTopic,
 {
-    pub fn new() -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
             senders: HashMap::new(),
-            receivers: HashMap::new(),
-            distributors: HashMap::new(),
-            num_dist_per_topic: HashMap::new(),
-            uniq_dist_id_incr: HashMap::new(),
-            termination_chnls: HashMap::new(),
-            forwarding_flags: HashMap::new(),
+            runtimes: HashMap::new(),
+            size: size,
         }
-    }
-
-    pub fn restart_forwarding(&mut self, topic: &T, ndist: Option<usize>) -> (Arc<AtomicBool>, flume::Receiver<usize>) {
-        // --------------------------------------------------
-        // if the termination channel exists:
-        // - get the number of distributors for the topic
-        // - get the termination channel
-        // - send the number of distributors for termination
-        // - get the forwarding boolean to confirm termination\
-        // - return
-        // --------------------------------------------------
-        // otherwise:
-        // - create the termination channel
-        // - create the forwarding boolean
-        // - return
-        // --------------------------------------------------
-        if self.termination_chnls.contains_key(&topic) {
-            let ndist = match ndist {
-                Some(ndist) => ndist,
-                None => self.num_dist_per_topic.get(&topic).unwrap().load(Ordering::SeqCst) - 1,
-            };
-            let (sender, receiver) = self.termination_chnls.get_mut(&topic).unwrap();
-            let res = sender.send(ndist);
-            tracing::debug!("Channel termination requested from main thread: {:?}", res);
-            let fflag = self.forwarding_flags.get(&topic).unwrap().clone();
-            (fflag, receiver.clone())
-        } else {
-            let (sender, receiver) = flume::unbounded();
-            let fflag = Arc::new(AtomicBool::new(false));
-            self.termination_chnls.insert(topic.clone(), (sender, receiver.clone()));
-            tracing::debug!("New sender/receiver pair created");
-            self.forwarding_flags.insert(topic.clone(), fflag.clone());
-            (fflag, receiver)
-        }
-    }
-
-
-    fn get_flume_receiver<D: 'static>(&mut self, topic: &T) -> flume::Receiver<D> {
-        let frecv_ = downcast::<flume::Receiver<D>>(self.receivers.remove(&topic).unwrap()).unwrap();
-        let frec = frecv_.clone();
-        self.receivers.insert(topic.clone(), Box::new(frecv_));
-        frec
-    }
-
-
-    fn get_vectorized_distributors<D: 'static>(&mut self, topic: &T) -> Vec::<flume::Sender<D>> {
-        let mut dists: Vec::<flume::Sender<D>> = Vec::new();
-        // --------------------------------------------------
-        // remove the distributors for the topic
-        // --------------------------------------------------
-        let mut distributors_copy: HashMap<usize, Box<dyn std::any::Any>> = HashMap::new();
-        let distributors = self.distributors.remove(&topic).unwrap();
-        for (cdid, cd) in distributors {
-            let dcd = downcast::<flume::Sender<D>>(cd).unwrap();
-            dists.push(dcd.clone());
-            // --------------------------------------------------
-            // add to copy
-            // --------------------------------------------------
-            distributors_copy.insert(cdid, Box::new(dcd));
-        }
-        // --------------------------------------------------
-        // insert back and return
-        // --------------------------------------------------
-        self.distributors.insert(topic.clone(), distributors_copy);
-        dists
-    }
-
-
-    pub fn update_distribution_threads<D: Send + Clone + 'static>(&mut self, topic: &T, ndist: Option<usize>) {
-        let (fflag, tchnl) = self.restart_forwarding(&topic, ndist);
-        let frec = self.get_flume_receiver::<D>(&topic);
-        let dists = self.get_vectorized_distributors(&topic);
-        // --------------------------------------------------
-        // create the buffer forwarding
-        // - move everything into new thread once the termination
-        //   has been set to confirm the previous thread has 
-        //   been terminated
-        // --------------------------------------------------
-        tracing::debug!("Termination command sent, waiting for thread to stop...");
-        while fflag.load(std::sync::atomic::Ordering::SeqCst) { std::thread::sleep(std::time::Duration::from_nanos(10)); }
-        let fflag_ = fflag.clone();
-        tracing::debug!("Thread STOPPED!");
-        tracing::debug!("Spawning thread with {} distributor(s)...", dists.len());
-        std::thread::spawn(move || forward::<D>(frec, dists, fflag_, tchnl));
-        while !fflag.load(std::sync::atomic::Ordering::SeqCst) { std::thread::sleep(std::time::Duration::from_nanos(10)); }
-        tracing::debug!("Thread has started!");
     }
 }
 
 
 #[derive(Clone)]
 pub struct Publisher<D, T> {
-    buf: flume::Sender<D>,
-    pub topic: T
+    pub topic: T,
+    buf: tokio::sync::broadcast::Sender<D>,
 }
 impl<D, T> Publisher<D, T> {
     #[inline]
-    pub fn new(buf: flume::Sender<D>, topic: T) -> Self {
+    pub fn new(buf: tokio::sync::broadcast::Sender<D>, topic: T) -> Self {
         Self { buf, topic }
     }
 
@@ -232,123 +111,167 @@ impl<D, T> Publisher<D, T> {
 }
 
 
-// #[derive(Clone)]
-// TODO: when deriving clone, this must update the forwarding thread. maybe have to add private reference to parent node?
-// How todo safely? and should re-architect?
-// pub struct Subscriber<'a, D, T> {
 pub struct Subscriber<D, T> {
-    pub id: usize,
-    // parent: Arc<Mutex<&'a mut ImplementedUnboundedNode<T>>>,
-    buf: Receiver<D>,
-    pub topic: T
+    pub topic: T,
+    rcvr: Receiver<D>,
+    sndr: Arc<tokio::sync::broadcast::Sender<D>>,
+    rt: Arc<tokio::runtime::Runtime>,
 }
 
-// impl<'a, D, T> Subscriber<'a, D, T>
 impl<D, T> Subscriber<D, T> 
 where
-    // ImplementedUnboundedNode<T>: CrosstalkPubSub<T>,
-    // T: Clone,
-    // D: Clone + Send + 'static
+    T: Clone,
+    D: Clone,
 {
     #[inline]
-    // pub fn new(id: usize, parent: Arc<Mutex<&'a mut ImplementedUnboundedNode<T>>>, buf: Receiver<D>, topic: T) -> Self {
-    //     Self { id, parent, buf, topic }
-    // }
-    pub fn new(id: usize, buf: Receiver<D>, topic: T) -> Self {
-        Self { id, buf, topic }
+    pub fn new(
+        topic: T,
+        rcvr: Option<tokio::sync::broadcast::Receiver<D>>,
+        sndr: Arc<tokio::sync::broadcast::Sender<D>>,
+        rt: Arc<tokio::runtime::Runtime>,
+    ) -> Self {
+        Self {
+            topic: topic,
+            rcvr: Receiver::new(
+                rcvr.unwrap_or(sndr.subscribe()),
+                rt.clone(),
+            ),
+            sndr: sndr.clone(),
+            rt: rt,
+        }
     }
 
-    // #[inline]
-    // pub fn clone(&self) -> Self {
-    //     let buf = {
-    //         let mut parent: std::sync::MutexGuard<'_, &'a mut ImplementedUnboundedNode<T>> = self.parent.lock().unwrap();
-    //         let buf: Subscriber<D, T> = parent.subscriber::<D>(self.topic.clone()).unwrap();
-    //         buf.buf
-    //     };
-    //     Self { id: self.id, parent: self.parent.clone(), buf, topic: self.topic.clone() }
-    //     // buf
-    //     // self.parent.lock().unwrap().subscriber::<D>(self.topic.clone()).unwrap()
-    // }
-    
     #[inline]
-    pub fn read(&self) -> Option<D> {
-        self.buf.read()
+    pub fn clone(&self) -> Self {
+        Self {
+            topic: self.topic.clone(),
+            rcvr: Receiver::new(
+                self.sndr.subscribe(),
+                self.rt.clone(),
+            ),
+            sndr: self.sndr.clone(),
+            rt: self.rt.clone(),
+        }
     }
     
     #[inline]
-    pub fn try_read(&self) -> Option<D> {
-        self.buf.try_read()
+    pub async fn read_async(&mut self) -> Option<D> {
+        self.rcvr.read_async().await
+    }
+
+    pub fn read(&mut self) -> Option<D> {
+        self.rcvr.read()
     }
     
     #[inline]
-    pub fn read_blocking(&self) -> Option<D> {
-        self.buf.read_blocking()
+    pub fn try_read(&mut self) -> Option<D> {
+        self.rcvr.try_read()
     }
     
     #[inline]
-    pub fn read_timeout(&self, timeout: std::time::Duration) -> Option<D> {
-        self.buf.read_timeout(timeout)
+    pub fn read_blocking(&mut self) -> Option<D> {
+        self.rcvr.read_blocking()
+    }
+    
+    #[inline]
+    pub fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
+        self.rcvr.read_timeout(timeout)
     }
 
     #[inline]
     pub fn set_timeout(&mut self, timeout: std::time::Duration) {
-        self.buf.set_timeout(timeout);
+        self.rcvr.set_timeout(timeout);
     }
 }
 
 
-#[derive(Clone)]
 /// Receiver
 /// 
 /// Define a receiver for subscribing messages
 /// 
-/// Defaultly reads from flume::Receiver, but also reads from crossbeam::channel::Receiver
-/// when the number of publishers is greater than 1
+/// Reads from tokio::sync::broadcast::Receiver
 pub struct Receiver<D> {
-    buf: flume::Receiver<D>,
-    plen: Arc<AtomicUsize>,
-    pbuf: flume::Receiver<D>,
+    buf: tokio::sync::broadcast::Receiver<D>,
+    rt: Arc<tokio::runtime::Runtime>,
+    handle: tokio::runtime::Handle,
     timeout: std::time::Duration,
 }
-impl<D> Receiver<D> {
+impl<D> Receiver<D>
+where
+    D: Clone
+{
     #[inline]
     pub fn new(
-        buf: flume::Receiver<D>,
-        plen: Arc<AtomicUsize>,
-        pbuf: flume::Receiver<D>,
+        buf: tokio::sync::broadcast::Receiver<D>,
+        rt: Arc<tokio::runtime::Runtime>,
     ) -> Self {
-        Self{ buf, plen, pbuf, timeout: std::time::Duration::from_millis(10) }
+        Self {
+            buf: buf,
+            rt: rt.clone(),
+            handle: rt.handle().clone(),
+            timeout: std::time::Duration::from_millis(10),
+        }
     }
 
     #[inline]
-    pub fn read(&self) -> Option<D> {
+    pub async fn read_async(&mut self) -> Option<D> {
+        let _guard = self.handle.enter();
+        match self.buf.recv().await {
+            Ok(d) => Some(d),
+            Err(e) => {
+                // TODO: better errors
+                log::error!("Error: {:?}", e);
+                None
+            }
+        }
+    }
+
+    #[inline]
+    pub fn read(&mut self) -> Option<D> {
         self.read_timeout(self.timeout)
     }
     
     #[inline]
-    pub fn try_read(&self) -> Option<D> {
-        match self.plen.load(Ordering::SeqCst) {
-            0 => None,
-            1 => self.buf.try_recv().ok(),
-            _ => self.pbuf.try_recv().ok(),
+    pub fn try_read(&mut self) -> Option<D> {
+        let _guard = self.rt.enter();
+        match self.buf.try_recv() {
+            Ok(d) => Some(d),
+            Err(e) => {
+                // TODO: better errors
+                log::error!("Error: {:?}", e);
+                None
+            }
         }
     }
     
     #[inline]
-    pub fn read_blocking(&self) -> Option<D> {
-        match self.plen.load(Ordering::SeqCst) {
-            0 => None,
-            1 => self.buf.recv().ok(),
-            _ => self.pbuf.recv().ok(),
+    pub fn read_blocking(&mut self) -> Option<D> {
+        let _guard = self.rt.enter();
+        match self.buf.blocking_recv() {
+            Ok(d) => Some(d),
+            Err(e) => {
+                // TODO: better errors
+                log::error!("Error: {:?}", e);
+                None
+            }
         }
     }
     
     #[inline]
-    pub fn read_timeout(&self, timeout: std::time::Duration) -> Option<D> {
-        match self.plen.load(Ordering::SeqCst) {
-            0 => None,
-            1 => self.buf.recv_timeout(timeout).ok(),
-            _ => self.pbuf.recv_timeout(timeout).ok(),
+    pub fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
+        let _guard = self.rt.enter();
+        match self.rt.block_on(tokio::time::timeout(timeout, self.buf.recv())) {
+            Ok(Ok(d)) => Some(d),
+            Ok(Err(e)) => {
+                // TODO: better errors
+                log::error!("Error: {:?}", e);
+                None
+            },
+            Err(e) => {
+                // TODO: better errors
+                log::error!("Error: {:?}", e);
+                None
+            }
         }
     }
     
@@ -382,73 +305,8 @@ pub trait CrosstalkPubSub<T> {
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
     fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>>;
     fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
-    // fn participant<D: 'static>(&mut self, topic: T) -> Result<(), Box<dyn std::error::Error>>;
     fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>);
     fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>);
-}
-
-
-pub fn forward<D: Clone>(
-    i_buf: flume::Receiver<D>,
-    o_bufs: Vec<flume::Sender<D>>,
-    forwarding: Arc<AtomicBool>,
-    terminate: flume::Receiver<usize>,
-) {
-    forwarding.store(true, Ordering::SeqCst);
-    let num_publishers = o_bufs.len();
-    tracing::debug!("Thread has spawned! Num distributors: {}", num_publishers);
-    let mut exit_0 = false;
-    let mut exit_1 = false;
-    match num_publishers {
-        0 => (),
-        1 => {
-            let publisher = &o_bufs[0];
-            loop {
-                let selector = flume::Selector::new()
-                .recv(&i_buf, |sample| {
-                    match sample {
-                        Ok(sample) => { let _ = publisher.send(sample); },
-                        Err(_) => exit_0 = true,
-                    }
-                })
-                .recv(&terminate, |npub| {
-                    match npub {
-                        Ok(npub) => if npub == num_publishers { exit_1 = true; },
-                        Err(_) => exit_1 = true,
-                    }
-                });
-                selector.wait();
-                if exit_0 || exit_1 { break; }
-            }
-        },
-        _ => {
-            let publisher_0 = &o_bufs[0];
-            let publisher_n = &o_bufs[1..];
-            loop {
-                let selector = flume::Selector::new()
-                .recv(&i_buf, |sample| {
-                    match sample {
-                        Ok(sample) => {
-                            publisher_n
-                            .iter()
-                            .for_each(|publisher| { let _ = publisher.send(sample.clone()); });
-                            let _ = publisher_0.send(sample);
-                        },
-                        Err(_) => exit_0 = true,
-                    }
-                })
-                .recv(&terminate, |npub| {
-                    match npub {
-                        Ok(npub) => if npub == num_publishers { exit_1 = true; },
-                        Err(_) => exit_1 = true,
-                    }
-                });
-                selector.wait();
-                if exit_0 || exit_1 { break; }
-            }
-        }
-    }
-    forwarding.store(false, Ordering::SeqCst);
 }
 
 

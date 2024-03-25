@@ -105,32 +105,46 @@ impl Parse for NodeFields {
 fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenStream2 {
     let contents = quote! {
          => {
-            let err = crosstalk::Error::PublisherMismatch(std::any::type_name::<D>().into(), std::any::type_name::<#dtype>().into());
-            if std::any::TypeId::of::<D>() == std::any::TypeId::of::<#dtype>() {
+            let err = ::crosstalk::Error::PublisherMismatch(
+                ::std::any::type_name::<D>().into(),
+                ::std::any::type_name::<#dtype>().into(),
+            );
+            if ::std::any::TypeId::of::<D>()
+            == ::std::any::TypeId::of::<#dtype>() {
                 // --------------------------------------------------
                 // if the datatype matches, get the flume sender to create the publisher
                 // --------------------------------------------------
-                let fsen = match self.senders.contains_key(&topic) {
+                let tsen = match self.senders.contains_key(&topic) {
                     true => {
-                        let fsen_ = crosstalk::downcast::<crosstalk::flume::Sender<#dtype>>(self.senders.remove(&topic).unwrap()).unwrap();
-                        let fsen = fsen_.clone();
-                        self.senders.insert(topic, Box::new(fsen_));
-                        fsen
+                        let tsen_ = ::crosstalk::downcast::<
+                                    ::crosstalk::external::broadcast::Sender<#dtype>
+                                    >(self.senders.remove(&topic).unwrap()).unwrap();
+                        let tsen = tsen_.clone();
+                        self.senders.insert(topic, Box::new(tsen_));
+                        tsen
                     },
                     false => {
-                        let (sender, receiver) =  crosstalk::flume::unbounded::<#dtype>();
+                        // size is defined during crosstalk::BoundedNode::new(size)
+                        let (sender, _) =  ::crosstalk::external::broadcast::channel::<#dtype>(self.size);
                         self.senders.insert(topic, Box::new(sender.clone()));
-                        self.receivers.insert(topic, Box::new(receiver));
+                        let rt = match ::crosstalk::external::runtime::Runtime::new() {
+                            Ok(rt) => ::std::sync::Arc::new(rt),
+                            Err(err) => {
+                                ::crosstalk::external::tracing::error!(?err);
+                                return Err(Box::new(err))
+                            }
+                        };
+                        self.runtimes.insert(topic, rt);
                         sender
                     }
                 };
                 // --------------------------------------------------
                 // create and return publisher
                 // --------------------------------------------------
-                match crosstalk::downcast::<crosstalk::Publisher<D, #tenum>>(Box::new(crosstalk::Publisher::new(fsen, topic))) {
+                match ::crosstalk::downcast::<::crosstalk::Publisher<D, #tenum>>(Box::new(::crosstalk::Publisher::new(tsen, topic))) {
                     Ok(publisher) => Ok(publisher),
                     Err(_e) => { // <-- this should never happen
-                        crosstalk::tracing::error!(?err);
+                        ::crosstalk::external::tracing::error!(?err);
                         Err(Box::new(err))
                     }
                 }
@@ -138,7 +152,7 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                 // --------------------------------------------------
                 // if the datatype does not match, return an error
                 // --------------------------------------------------
-                crosstalk::tracing::error!(?err);
+                ::crosstalk::external::tracing::error!(?err);
                 Err(Box::new(err))
             }
         }
@@ -158,95 +172,46 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
          => {
             let err = ::crosstalk::Error::SubscriberMismatch(
                 ::std::any::type_name::<D>().into(),
-                ::std::any::type_name::<#dtype>().into()
+                ::std::any::type_name::<#dtype>().into(),
             );
             if ::std::any::TypeId::of::<D>()
             == ::std::any::TypeId::of::<#dtype>() {
                 // --------------------------------------------------
                 // if the datatype matches, get the flume receiver to create the subscriber
                 // --------------------------------------------------
-                let frec = match self.receivers.contains_key(&topic) {
+                let (tsen, rt) = match self.senders.contains_key(&topic) {
                     true => {
-                        let frec_ = ::crosstalk::downcast::<
-                                    ::crosstalk::flume::Receiver<#dtype>
-                                    >(self.receivers.remove(&topic).unwrap()).unwrap();
-                        let frec = frec_.clone();
-                        self.receivers.insert(topic, Box::new(frec_));
-                        frec
+                        let tsen_ = ::crosstalk::downcast::<
+                                    ::crosstalk::external::broadcast::Sender<#dtype>
+                                    >(self.senders.remove(&topic).unwrap()).unwrap();
+                        let tsen = tsen_.clone();
+                        self.senders.insert(topic, Box::new(tsen_));
+                        let rt = self.runtimes.get(&topic).unwrap().clone();
+                        (tsen, rt)
                     },
                     false => {
-                        let (sender, receiver) = ::crosstalk::flume::unbounded::<#dtype>();
-                        self.senders.insert(topic, Box::new(sender));
-                        self.receivers.insert(topic, Box::new(receiver.clone()));
-                        receiver
+                        // size is defined during crosstalk::BoundedNode::new(size)
+                        let (sender, _) =  ::crosstalk::external::broadcast::channel::<#dtype>(self.size);
+                        self.senders.insert(topic, Box::new(sender.clone()));
+                        let rt = match ::crosstalk::external::runtime::Runtime::new() {
+                            Ok(rt) => ::std::sync::Arc::new(rt),
+                            Err(err) => {
+                                ::crosstalk::external::tracing::error!(?err);
+                                return Err(Box::new(err))
+                            }
+                        };
+                        self.runtimes.insert(topic, rt.clone());
+                        (sender, rt)
                     }
-                };
-                // --------------------------------------------------
-                // get the distribution id and the crossbeam receiver
-                // --------------------------------------------------
-                let mut update_threads = false;
-                let (ndist, did, crec) = match self.distributors.contains_key(&topic) {
-                    true => {
-                        // --------------------------------------------------
-                        // create sender / receiver
-                        // --------------------------------------------------
-                        let (sender, receiver) = ::crosstalk::flume::unbounded::<#dtype>();
-                        // --------------------------------------------------
-                        // - get the existing distributors (to add a new sender for forwarding)
-                        // - get a unique distributor id
-                        // - update the number of distributors for the topic
-                        // --------------------------------------------------
-                        let dists = self.distributors.get_mut(&topic).unwrap();
-                        let did = self.uniq_dist_id_incr.get_mut(&topic).unwrap();
-                        *did += 1;
-                        dists.insert(*did, Box::new(sender));
-                        let ndist = dists.len();
-                        crosstalk::tracing::debug!("Updating num distributors from {} to {}", self.num_dist_per_topic.get(&topic).unwrap().load(std::sync::atomic::Ordering::SeqCst), ndist.clone());
-                        self.num_dist_per_topic.get_mut(&topic).unwrap().store(ndist.clone(), std::sync::atomic::Ordering::SeqCst);
-                        // --------------------------------------------------
-                        // indicate whether to create a new forwarding thread
-                        // --------------------------------------------------
-                        update_threads = ndist > 1;
-                        (ndist, did.clone(), receiver)
-                    },
-                    false => {
-                        // --------------------------------------------------
-                        // create sender / receiver
-                        // --------------------------------------------------
-                        let (sender, receiver) = ::crosstalk::flume::unbounded::<#dtype>();
-                        // --------------------------------------------------
-                        // - set the unique distributor id to 0
-                        // - create a new hashmap of distributors (to add a new sender for forwarding)
-                        // - update the number of distributors for the topic
-                        // --------------------------------------------------
-                        let did = 0;
-                        self.uniq_dist_id_incr.insert(topic, did.clone());
-                        self.distributors.insert(topic, ::std::collections::HashMap::new());
-                        let dists = self.distributors.get_mut(&topic).unwrap();
-                        dists.insert(did.clone(), Box::new(sender));
-                        let ndist = dists.len();
-                        ::crosstalk::tracing::debug!("Updating num distributors from <nothing> to {}", ndist.clone());
-                        self.num_dist_per_topic.insert(topic, ::std::sync::Arc::new(::std::sync::atomic::AtomicUsize::new(ndist.clone())));
-                        (ndist, did.clone(), receiver)
-                    }
-                };
-                // --------------------------------------------------
-                // kill existing forwarding thread(s)
-                // (which distribute the mp data to individual subscribers)
-                // and create a new forwarding thread
-                // --------------------------------------------------
-                if update_threads {
-                    crosstalk::tracing::debug!("Telling distribution threads to kill thread with ndist={}", ndist - 1);
-                    self.update_distribution_threads::<D>(&topic, Some(ndist - 1))
                 };
                 // --------------------------------------------------
                 // create and return subscriber
                 // --------------------------------------------------
-                match ::crosstalk::downcast::<::crosstalk::Receiver<D>>(Box::new(::crosstalk::Receiver::new(frec, self.num_dist_per_topic.get(&topic).unwrap().clone(), crec))) {
-                    Ok(rec) => Ok(::crosstalk::Subscriber::new(did, rec, topic)),
+                match ::crosstalk::downcast::<::crosstalk::external::broadcast::Sender<D>>(Box::new(tsen)) {
+                    Ok(sender) => Ok(::crosstalk::Subscriber::new(topic, None, ::std::sync::Arc::new(sender), rt)),
                     // Ok(rec) => Ok(::crosstalk::Subscriber::new(did, ::std::sync::Arc::new(::std::sync::Mutex::new(self)), rec, topic)),
                     Err(_e) => { // <-- this should never happen
-                        ::crosstalk::tracing::error!(?err);
+                        ::crosstalk::external::tracing::error!(?err);
                         Err(Box::new(err))
                     }
                 }
@@ -254,7 +219,7 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                 // --------------------------------------------------
                 // if the datatype does not match, return an error
                 // --------------------------------------------------
-                ::crosstalk::tracing::error!(?err);
+                ::crosstalk::external::tracing::error!(?err);
                 Err(Box::new(err))
             }
         }
@@ -347,7 +312,7 @@ pub fn init(input: TokenStream) -> TokenStream {
     let output: TokenStream2 = quote! {
 
         #[automatically_derived]
-        impl ::crosstalk::CrosstalkPubSub<#enum_master> for ::crosstalk::ImplementedUnboundedNode<#enum_master> {
+        impl ::crosstalk::CrosstalkPubSub<#enum_master> for ::crosstalk::ImplementedBoundedNode<#enum_master> {
 
             fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<::crosstalk::Publisher<D, #enum_master>, Box<dyn ::std::error::Error>> {
                 match topic {
@@ -372,30 +337,10 @@ pub fn init(input: TokenStream) -> TokenStream {
                     Err(err) => Err(err),
                 }
             }
-
-            // fn participant<D: 'static>(&mut self, topic: #enum_master) -> Result<(), Box<dyn std::error::Error>> {
-            //     // TODO
-            //     Ok(())
-            // }
         
             fn delete_publisher<D: 'static>(&mut self, _publisher: ::crosstalk::Publisher<D, #enum_master>) {}
         
-            fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: ::crosstalk::Subscriber<D, #enum_master>) {
-                let topic = subscriber.topic.clone();
-                if let Some(dists) = self.distributors.get_mut(&topic) {
-                    dists.remove(&subscriber.id);
-                }
-                if let Some(ndist) = self.num_dist_per_topic.get(&topic) {
-                    let n = ndist.fetch_update(::std::sync::atomic::Ordering::SeqCst, ::std::sync::atomic::Ordering::SeqCst, |x| Some(x - 1));
-                    match n {
-                        Ok(n) => match n {
-                            0..=2 => { let _ = self.restart_forwarding(&topic, Some(n)); },
-                            _ => self.update_distribution_threads::<D>(&topic, Some(n)),
-                        },
-                        Err(_) => (),
-                    }
-                }
-            }
+            fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: ::crosstalk::Subscriber<D, #enum_master>) {}
 
         }
 
@@ -450,7 +395,7 @@ pub fn derive_enum_as_topic(input: TokenStream) -> TokenStream {
             }
         }
         #[automatically_derived]
-        impl crosstalk::CrosstalkTopic for #name {}
+        impl ::crosstalk::CrosstalkTopic for #name {}
     };
 
     TokenStream::from(expanded)
