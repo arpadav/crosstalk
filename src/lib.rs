@@ -86,7 +86,6 @@ where
 {
     pub fn new(size: usize) -> Self {
         let create_runtimes = tokio::runtime::Handle::try_current().is_err();
-        log::error!("create_runtimes: {:?}", create_runtimes);
         Self {
             senders: HashMap::new(),
             runtimes: HashMap::new(),
