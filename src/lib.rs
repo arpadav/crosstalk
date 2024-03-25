@@ -8,8 +8,8 @@ use std::{
     },
     any::Any,
 };
-use hashbrown::HashMap;
 use core::hash::Hash;
+use hashbrown::HashMap;
 
 // --------------------------------------------------
 // internal
@@ -72,6 +72,7 @@ where
 pub struct ImplementedBoundedNode<T> {
     pub senders: HashMap<T, Box<dyn Any + 'static>>,
     pub runtimes: HashMap<T, Arc<tokio::runtime::Runtime>>,
+    pub create_runtimes: bool,
     pub size: usize,
 }
 
@@ -84,9 +85,12 @@ where
     T: CrosstalkTopic,
 {
     pub fn new(size: usize) -> Self {
+        let create_runtimes = tokio::runtime::Handle::try_current().is_err();
+        log::error!("create_runtimes: {:?}", create_runtimes);
         Self {
             senders: HashMap::new(),
             runtimes: HashMap::new(),
+            create_runtimes: tokio::runtime::Handle::try_current().is_err(),
             size: size,
         }
     }
@@ -115,7 +119,7 @@ pub struct Subscriber<D, T> {
     pub topic: T,
     rcvr: Receiver<D>,
     sndr: Arc<tokio::sync::broadcast::Sender<D>>,
-    rt: Arc<tokio::runtime::Runtime>,
+    rt: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl<D, T> Subscriber<D, T> 
@@ -128,16 +132,28 @@ where
         topic: T,
         rcvr: Option<tokio::sync::broadcast::Receiver<D>>,
         sndr: Arc<tokio::sync::broadcast::Sender<D>>,
-        rt: Arc<tokio::runtime::Runtime>,
+        rt: Option<Arc<tokio::runtime::Runtime>>,
     ) -> Self {
-        Self {
-            topic: topic,
-            rcvr: Receiver::new(
-                rcvr.unwrap_or(sndr.subscribe()),
-                rt.clone(),
-            ),
-            sndr: sndr.clone(),
-            rt: rt,
+        let rcvr = rcvr.unwrap_or(sndr.subscribe());
+        match rt {
+            Some(rt) => Self {
+                topic: topic,
+                rcvr: Receiver::new(
+                    rcvr,
+                    Some(rt.clone()),
+                ),
+                sndr: sndr.clone(),
+                rt: Some(rt),
+            },
+            None => Self {
+                topic: topic,
+                rcvr: Receiver::new(
+                    rcvr,
+                    None,
+                ),
+                sndr: sndr.clone(),
+                rt: None,
+            },
         }
     }
 
@@ -192,8 +208,7 @@ where
 /// Reads from tokio::sync::broadcast::Receiver
 pub struct Receiver<D> {
     buf: tokio::sync::broadcast::Receiver<D>,
-    rt: Arc<tokio::runtime::Runtime>,
-    handle: tokio::runtime::Handle,
+    rt: Option<Arc<tokio::runtime::Runtime>>,
     timeout: std::time::Duration,
 }
 impl<D> Receiver<D>
@@ -203,26 +218,40 @@ where
     #[inline]
     pub fn new(
         buf: tokio::sync::broadcast::Receiver<D>,
-        rt: Arc<tokio::runtime::Runtime>,
+        rt: Option<Arc<tokio::runtime::Runtime>>,
     ) -> Self {
+        let timeout = std::time::Duration::from_millis(10);
         Self {
             buf: buf,
-            rt: rt.clone(),
-            handle: rt.handle().clone(),
-            timeout: std::time::Duration::from_millis(10),
+            rt: rt,
+            timeout: timeout,
         }
     }
 
     #[inline]
-    pub async fn read_async(&mut self) -> Option<D> {
-        let _guard = self.handle.enter();
-        match self.buf.recv().await {
+    fn match_result(&self, result: std::result::Result<D, Box<dyn std::error::Error>>) -> Option<D> {
+        match result {
             Ok(d) => Some(d),
             Err(e) => {
                 // TODO: better errors
                 log::error!("Error: {:?}", e);
                 None
             }
+        }
+    }
+
+    #[inline]
+    pub async fn read_async(&mut self) -> Option<D> {
+        match self.rt {
+            Some(ref rt) => {
+                let _guard = rt.enter();
+                let res = self.buf.recv().await;
+                self.match_result(res.boxed())
+            },
+            None => {
+                let res = self.buf.recv().await;
+                self.match_result(res.boxed())
+            },
         }
     }
 
@@ -233,44 +262,68 @@ where
     
     #[inline]
     pub fn try_read(&mut self) -> Option<D> {
-        let _guard = self.rt.enter();
-        match self.buf.try_recv() {
-            Ok(d) => Some(d),
-            Err(e) => {
-                // TODO: better errors
-                log::error!("Error: {:?}", e);
-                None
-            }
+        match self.rt {
+            Some(ref rt) => {
+                let _guard = rt.enter();
+                let res = self.buf.try_recv();
+                self.match_result(res.boxed())
+            },
+            None => {
+                let res = self.buf.try_recv();
+                self.match_result(res.boxed())
+            },
         }
     }
     
     #[inline]
     pub fn read_blocking(&mut self) -> Option<D> {
-        let _guard = self.rt.enter();
-        match self.buf.blocking_recv() {
-            Ok(d) => Some(d),
-            Err(e) => {
-                // TODO: better errors
-                log::error!("Error: {:?}", e);
-                None
+        match self.rt {
+            Some(ref rt) => {
+                let _guard = rt.enter();
+                let res = self.buf.blocking_recv();
+                self.match_result(res.boxed())
+            },
+            None => {
+                let res = self.buf.blocking_recv();
+                self.match_result(res.boxed())
             }
         }
     }
     
     #[inline]
     pub fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
-        let _guard = self.rt.enter();
-        match self.rt.block_on(tokio::time::timeout(timeout, self.buf.recv())) {
-            Ok(Ok(d)) => Some(d),
-            Ok(Err(e)) => {
-                // TODO: better errors
-                log::error!("Error: {:?}", e);
-                None
+        match self.rt {
+            Some(ref rt) => {
+                let _guard = rt.enter();
+                match rt.block_on(tokio::time::timeout(timeout, self.buf.recv())) {
+                    Ok(res) => self.match_result(res.boxed()),
+                    Err(e) => {
+                        // TODO: improve this error
+                        log::error!("Timeout error occurred: {:?}", e);
+                        None
+                    }
+                }
             },
-            Err(e) => {
-                // TODO: better errors
-                log::error!("Error: {:?}", e);
-                None
+            None => {
+                match tokio::runtime::Handle::try_current() {
+                    Ok(ref handle) => {
+                        match handle.block_on(async {
+                            tokio::time::timeout(timeout, self.buf.recv()).await
+                        }) {
+                            Ok(res) => self.match_result(res.boxed()),
+                            Err(e) => {
+                                // TODO: improve this error
+                                log::error!("Timeout error occurred: {:?}", e);
+                                None
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        // TODO: improve this error
+                        log::error!("Tokio runtime is said to be running, but can not find current handle: {:?}", e);
+                        None
+                    },
+                }
             }
         }
     }
@@ -318,5 +371,29 @@ where
     match buf.downcast::<T>() {
         Ok(t) => Ok(*t),
         Err(e) => Err(e),
+    }
+}
+
+/// Converts a [`Result`]<_, `E`> (where `E` implements [`std::error::Error`]) into a [`Result`]<_, [`Box`]<[`dyn`][`std::error::Error`]` + 'static`>>
+pub trait BoxResult2Result<T, E> {
+    fn boxed(self) -> Result<T, Box<dyn std::error::Error>>;
+}
+/// Implements the [`BoxResult2Result`](crate::sflib::errors::BoxResult2Result) trait for all [`std::error::Error`](std::error::Error) types.
+impl <T, E: std::error::Error + 'static> BoxResult2Result<T, E> for Result<T, E> {
+    /// Converts into a [`Box`](std::boxed::Box) and wraps it in a [`Result`](std::result::Result).
+    /// 
+    /// # Arguments
+    /// 
+    /// * [`self`] - The datatype that implements [`std::error::Error`] to be wrapped in a [`Box`](std::boxed::Box).
+    /// 
+    /// # Returns
+    /// 
+    /// The converted [`Result`]<(), [`Box`]<[`dyn`][`std::error::Error`]` + 'static`>>.
+    /// 
+    /// # Usage
+    /// 
+    /// TODO
+    fn boxed(self) -> Result<T, Box<dyn std::error::Error>> {
+        self.map_err(|e| e.into())
     }
 }
