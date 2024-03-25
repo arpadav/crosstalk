@@ -6,6 +6,7 @@
 - [ ] Add crate-level documentation to `crosstalk-macros`, with doc examples
 - [ ] Add function-level documentation to `crosstalk-macros`, with doc examples
 - [ ] Incorporate multiple topics in benchmarking (currently only 1)
-- [ ] Add bounded channel support
+- [x] Add bounded channel support
+- [ ] Unbounded channel support, or should wait for tokio? v0.1.4 allowed it exclusively
 - [x] Add destroying of publisher and subscriber
 - [ ] Test destroying of publisher and subscriber
