@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "An extremely lightweight, topic-based, cross-thread, in-memory communication library"
@@ -15,6 +15,7 @@ edition = "2021"
 
 [dependencies]
 log = "0.4"
+hashbrown = "0.14"
 crosstalk-macros = "0.2"
 tokio = { version = "1.36", features = ["sync", "time", "rt-multi-thread"] }
 
