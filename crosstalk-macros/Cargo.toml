@@ -7,7 +7,7 @@ description = "Procedural macros for crosstalk — An extremely lightweight, top
 repository = "https://github.com/arpadav/crosstalk/tree/main/crosstalk-macros"
 documentation = "https://docs.rs/crosstalk-macros"
 readme = "README.md"
-keywords = ["thread", "channel", "mpmc", "pubsub", "distributed"]
+keywords = ["thread", "channel", "mpmc", "async", "distributed"]
 categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
 edition = "2021"
 
