@@ -1,53 +1,8 @@
-//! # Crosstalk Macros
-//!
-//! This crate provides macros for simplifying communication between threads using the Crosstalk library.
-//!
-//! ## Benchmarks
-//!
-//! The benchmarks module contains functions to benchmark different communication scenarios.
-//!
-//! ## External Dependencies
-//!
-//! This file imports external dependencies such as `quote` and `syn` for code generation and parsing.
-//!
-//! ## Functionality
-//!
-//! This file contains various functions for handling message transmission and reception between publishers and subscribers.
-//! The functions are designed to work efficiently and return when messages are successfully received.
-//! There are also functions for draining messages from subscribers and handling multiple publishers and subscribers.
-//!
-//! ## Constants
-//!
-//! The file defines constants for the number of publishers, subscribers, and messages used in the benchmarks.
-//!
-//! ## Custom Structs
-//!
-//! There are examples of custom structs like `DetectorOutput`, though they are currently commented out for future use.
-//!
-//! ## Topics Enum
-//!
-//! An example enum `TopicZoo` is defined for different topics that can be communicated between threads.
-//!
-//! ## Utility Functions
-//!
-//! Utility functions like `write` and `read` are provided for writing messages to publishers and reading messages from subscribers.
-//!
-//! ## Error Handling
-//!
-//! The code includes error handling for downcasting message types using the `downcast` function.
-//!
-//! ## Benchmarking
-//!
-//! Benchmarks are set up for various communication scenarios to measure performance and efficiency.
-//!
-//! ## Thread Management
-//!
-//! The file manages threads for communication between publishers and subscribers, ensuring messages are received and processed correctly.
-//!
+//! Macros for [`crosstalk`](https://crates.io/crates/crosstalk)
+//! 
 //! ## License
-//!
-//! This code is licensed under the MIT license.
-
+//! 
+//! Crosstalk is released under the MIT license [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
 // --------------------------------------------------
 // external
 // --------------------------------------------------
@@ -75,13 +30,20 @@ use proc_macro::TokenStream;
 use std::collections::HashSet;
 use proc_macro2::TokenStream as TokenStream2;
 
-
 #[derive(Debug)]
+/// Individual field for the [`crosstalk_macros::init!`] macro
+/// 
+/// # Format
+/// 
+/// ```text
+/// `<Enum>::<Variant> => <Type>`
+/// ```
 struct NodeField {
     topic: Path,
     _arrow: Token![=>],
     dtype: Type,
 }
+/// Implement [`Parse`] for [`NodeField`]
 impl Parse for NodeField {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(NodeField {
@@ -92,8 +54,18 @@ impl Parse for NodeField {
     }
 }
 
-
+/// Fields for the [`crosstalk_macros::init!`] macro
+/// 
+/// # Format
+/// 
+/// ```text
+/// crosstalk_macros::init!{
+///     `<Enum>::<Variant> => <Type>`,
+///     `<Enum>::<Variant> => <Type>`,
+/// }
+/// ```
 struct NodeFields(Punctuated<NodeField, Token![,]>);
+/// Implement [`Parse`] for [`NodeFields`]
 impl Parse for NodeFields {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content = Punctuated::<NodeField, Token![,]>::parse_terminated(input)?;
@@ -101,7 +73,10 @@ impl Parse for NodeFields {
     }
 }
 
-
+/// Get publisher arm (used in type-matching within the [`crosstalk_macros::init!`] macro)
+/// 
+/// This helps fill in the `match` statement in the [`crosstalk_macros::init!`] macro
+/// with all the arms that are valid for a given topic and datatype
 fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenStream2 {
     let contents = quote! {
          => {
@@ -168,7 +143,10 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
     }
 }
 
-
+/// Get subscriber arm (used in type-matching within the [`crosstalk_macros::init!`] macro)
+/// 
+/// This helps fill in the `match` statement in the [`crosstalk_macros::init!`] macro
+/// with all the arms that are valid for a given topic and datatype
 fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
     let contents = quote! {
          => {
@@ -243,8 +221,49 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
     }
 }
 
-
 #[proc_macro]
+/// Macro used to initialize a [`crosstalk`](https://crates.io/crates/crosstalk) node
+/// 
+/// This correlates variants in the enum (topics) with datatypes used to 
+/// communicate on said topics. These channels broadcast messages from publishers
+/// to subscribers, without catastrophic consumption of the data
+/// 
+/// Any variants missing from the macro will automatically be added
+/// using the [`String`] datatype
+/// 
+/// The enum variants and the datatypes are formatted in the following fashion:
+/// 
+/// ```rust ignore
+/// crosstalk::init!{
+///     TopicEnum::Variant1 => bool,
+///     TopicEnum::Variant2 => String,
+///     TopicEnum::Variant3 => i32,
+/// }
+/// ```
+/// 
+/// Where `TopicEnum::<VariantName>` is the name of the enum, followed by 
+/// a `=>` and the datatype to be used on that topic of communication
+/// 
+/// # Examples
+/// 
+/// ```ignore
+/// use crosstalk::AsTopic;
+/// 
+/// #[derive(AsTopic)]
+/// enum ExampleTopics {
+///     BoolChannel,
+///     StringChannel,
+///     IntChannel,
+///     MissingChannel,
+/// }
+/// 
+/// crosstalk::init!{
+///     ExampleTopics::BoolChannel => bool,
+///     ExampleTopics::StringChannel => String,
+///     ExampleTopics::IntChannel => i32,
+/// }
+/// // `ExampleTopics::MissingChannel`` will be added automatically with datatype `String``
+/// ```
 pub fn init(input: TokenStream) -> TokenStream {
     // --------------------------------------------------
     // parse
@@ -320,22 +339,27 @@ pub fn init(input: TokenStream) -> TokenStream {
     // output
     // --------------------------------------------------
     let output: TokenStream2 = quote! {
-
         #[automatically_derived]
         impl ::crosstalk::CrosstalkPubSub<#enum_master> for ::crosstalk::ImplementedBoundedNode<#enum_master> {
-
+            #[doc = "Get a [`crosstalk::Publisher`] for the given topic"]
+            #[doc = ""]
+            #[doc = "See [`crosstalk::BoundedNode::publisher`] for more information"]
             fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<::crosstalk::Publisher<D, #enum_master>, Box<dyn ::std::error::Error>> {
                 match topic {
                     #(#pub_arms,)*
                 }
             }
-
+            #[doc = "Get a [`crosstalk::Subscriber`] for the given topic"]
+            #[doc = ""]
+            #[doc = "See [`crosstalk::BoundedNode::subscriber`] for more information"]
             fn subscriber<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<::crosstalk::Subscriber<D, #enum_master>, Box<dyn ::std::error::Error>> {
                 match topic {
                     #(#sub_arms,)*
                 }
             }
-
+            #[doc = "Get a [`crosstalk::Publisher`] and [`crosstalk::Subscriber`] for the given topic"]
+            #[doc = ""]
+            #[doc = "See [`crosstalk::BoundedNode::pubsub`] for more information"]
             fn pubsub<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(::crosstalk::Publisher<D, #enum_master>, ::crosstalk::Subscriber<D, #enum_master>), Box<dyn ::std::error::Error>> {
                 match self.publisher(topic) {
                     Ok(publisher) => {
@@ -347,13 +371,15 @@ pub fn init(input: TokenStream) -> TokenStream {
                     Err(err) => Err(err),
                 }
             }
-        
+            #[doc = "Delete a [`crosstalk::Publisher`] for the given topic"]
+            #[doc = ""]
+            #[doc = "See [`crosstalk::BoundedNode::delete_publisher`] for more information"]
             fn delete_publisher<D: 'static>(&mut self, _publisher: ::crosstalk::Publisher<D, #enum_master>) {}
-        
+            #[doc = "Delete a [`crosstalk::Subscriber`] for the given topic"]
+            #[doc = ""]
+            #[doc = "See [`crosstalk::BoundedNode::delete_subscriber`] for more information"]
             fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: ::crosstalk::Subscriber<D, #enum_master>) {}
-
         }
-
     };
 
     // --------------------------------------------------
@@ -364,6 +390,25 @@ pub fn init(input: TokenStream) -> TokenStream {
 
 
 #[proc_macro_derive(AsTopic)]
+/// The [`AsTopic`] derive macro
+/// 
+/// This is used to distinguish enums as "crosstalk topics"
+/// by implementing the [`crosstalk::CrosstalkTopic`] trait
+/// amongst other traits
+///
+/// # Example
+/// 
+/// ```ignore
+/// use crosstalk::AsTopic;
+/// 
+/// #[derive(AsTopic)]
+/// enum ExampleTopics {
+///     BoolChannel,
+///     StringChannel,
+///     IntChannel,
+///     MissingChannel,
+/// }
+/// ```
 pub fn derive_enum_as_topic(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -411,7 +456,8 @@ pub fn derive_enum_as_topic(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-
+#[deprecated]
+/// This function is not expected to be used
 fn _type2fish(ty: &Type) -> TokenStream2 {
     match ty {
         Type::Path(type_path) => {
