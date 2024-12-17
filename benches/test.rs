@@ -11,7 +11,6 @@ use criterion::{
 // --------------------------------------------------
 // Example topics enum
 // --------------------------------------------------
-// #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[derive(AsTopic)]
 enum TopicZoo {
     Topic1,

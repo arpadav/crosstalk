@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk"
-version = "0.2.7"
+version = "0.3.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "An extremely lightweight, topic-based, cross-thread, in-memory communication library"
@@ -14,15 +14,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4"
-hashbrown = "0.14"
-crosstalk-macros = "0.2"
-tokio = { version = "1.36", features = ["sync", "time", "rt-multi-thread"] }
+crosstalk-macros = "0.3.0"
+log = { version = "0.4", optional = true }
+tracing = { version = "0.1", optional = true }
+tokio = { version = "1.42", features = ["sync", "time", "rt-multi-thread"] }
 
 [dev-dependencies]
 futures = "0.3"
 criterion = { version = "0.5", features = ["html_reports"] }
-tokio = { version = "1.36", features = ["macros", "sync", "time", "rt-multi-thread"] }
+tokio = { version = "1.42", features = ["macros", "sync", "time", "rt-multi-thread"] }
 
 [[bench]]
 name = "test"

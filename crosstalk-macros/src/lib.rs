@@ -20,8 +20,6 @@ use syn::{
         ParseStream,
     },
     DeriveInput,
-    PathArguments,
-    GenericArgument,
     parse_macro_input,
     punctuated::Punctuated,
 };
@@ -30,7 +28,6 @@ use proc_macro::TokenStream;
 use std::collections::HashSet;
 use proc_macro2::TokenStream as TokenStream2;
 
-#[derive(Debug)]
 /// Individual field for the [`crosstalk_macros::init!`] macro
 /// 
 /// # Format
@@ -43,7 +40,7 @@ struct NodeField {
     _arrow: Token![=>],
     dtype: Type,
 }
-/// Implement [`Parse`] for [`NodeField`]
+/// [`NodeField`] implementation of [`syn::parse::Parse`]
 impl Parse for NodeField {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(NodeField {
@@ -65,7 +62,8 @@ impl Parse for NodeField {
 /// }
 /// ```
 struct NodeFields(Punctuated<NodeField, Token![,]>);
-/// Implement [`Parse`] for [`NodeFields`]
+
+/// [`NodeFields`] implementation of [`syn::parse::Parse`]
 impl Parse for NodeFields {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content = Punctuated::<NodeField, Token![,]>::parse_terminated(input)?;
@@ -79,7 +77,7 @@ impl Parse for NodeFields {
 /// with all the arms that are valid for a given topic and datatype
 fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenStream2 {
     let contents = quote! {
-         => {
+        => {
             let err = ::crosstalk::Error::PublisherMismatch(
                 ::std::any::type_name::<D>().into(),
                 ::std::any::type_name::<#dtype>().into(),
@@ -102,16 +100,6 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                         // size is defined during crosstalk::BoundedNode::new(size)
                         let (sender, _) =  ::crosstalk::external::broadcast::channel::<#dtype>(self.size);
                         self.senders.insert(topic, Box::new(sender.clone()));
-                        if self.create_runtimes {
-                            let rt = match ::crosstalk::external::runtime::Runtime::new() {
-                                Ok(rt) => ::std::sync::Arc::new(rt),
-                                Err(err) => {
-                                    ::crosstalk::external::log::error!("{}", err);
-                                    return Err(Box::new(err))
-                                }
-                            };
-                            self.runtimes.insert(topic, rt);
-                        }
                         sender
                     }
                 };
@@ -120,16 +108,12 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
                 // --------------------------------------------------
                 match ::crosstalk::downcast::<::crosstalk::Publisher<D, #tenum>>(Box::new(::crosstalk::Publisher::new(tsen, topic))) {
                     Ok(publisher) => Ok(publisher),
-                    Err(_e) => { // <-- this should never happen
-                        ::crosstalk::external::log::error!("{}", err);
-                        Err(Box::new(err))
-                    }
+                    Err(_) => Err(Box::new(err)), // <-- this should never happen
                 }
             } else {
                 // --------------------------------------------------
                 // if the datatype does not match, return an error
                 // --------------------------------------------------
-                ::crosstalk::external::log::error!("{}", err);
                 Err(Box::new(err))
             }
         }
@@ -149,7 +133,7 @@ fn get_publisher_arm(tenum: &Ident, case: Option<&Path>, dtype: &Type) -> TokenS
 /// with all the arms that are valid for a given topic and datatype
 fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
     let contents = quote! {
-         => {
+        => {
             let err = ::crosstalk::Error::SubscriberMismatch(
                 ::std::any::type_name::<D>().into(),
                 ::std::any::type_name::<#dtype>().into(),
@@ -175,39 +159,17 @@ fn get_subscriber_arm(case: Option<&Path>, dtype: &Type) -> TokenStream2 {
                         sender
                     }
                 };
-                let rt = match self.create_runtimes {
-                    true => match self.runtimes.get(&topic) {
-                            Some(rt) => Some(rt.clone()),
-                            None => {
-                                let rt = match ::crosstalk::external::runtime::Runtime::new() {
-                                    Ok(rt) => ::std::sync::Arc::new(rt),
-                                    Err(err) => {
-                                        ::crosstalk::external::log::error!("{}", err);
-                                        return Err(Box::new(err))
-                                    }
-                                };
-                                self.runtimes.insert(topic, rt.clone());
-                                Some(rt)
-                            }
-                        },
-                    false => None,
-                };
                 // --------------------------------------------------
                 // create and return subscriber
                 // --------------------------------------------------
                 match ::crosstalk::downcast::<::crosstalk::external::broadcast::Sender<D>>(Box::new(tsen)) {
-                    Ok(sender) => Ok(::crosstalk::Subscriber::new(topic, None, ::std::sync::Arc::new(sender), rt)),
-                    // Ok(rec) => Ok(::crosstalk::Subscriber::new(did, ::std::sync::Arc::new(::std::sync::Mutex::new(self)), rec, topic)),
-                    Err(_e) => { // <-- this should never happen
-                        ::crosstalk::external::log::error!("{}", err);
-                        Err(Box::new(err))
-                    }
+                    Ok(sender) => Ok(::crosstalk::Subscriber::new(topic, None, ::std::sync::Arc::new(sender))),
+                    Err(_) => Err(Box::new(err)), // <-- this should never happen
                 }
             } else {
                 // --------------------------------------------------
                 // if the datatype does not match, return an error
                 // --------------------------------------------------
-                ::crosstalk::external::log::error!("{}", err);
                 Err(Box::new(err))
             }
         }
@@ -341,25 +303,27 @@ pub fn init(input: TokenStream) -> TokenStream {
     let output: TokenStream2 = quote! {
         #[automatically_derived]
         impl ::crosstalk::CrosstalkPubSub<#enum_master> for ::crosstalk::ImplementedBoundedNode<#enum_master> {
-            #[doc = "Get a [`crosstalk::Publisher`] for the given topic"]
+            #[doc = " Get a [`crosstalk::Publisher`] for the given topic"]
             #[doc = ""]
-            #[doc = "See [`crosstalk::BoundedNode::publisher`] for more information"]
+            #[doc = " See [`crosstalk::BoundedNode::publisher`] for more information"]
             fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<::crosstalk::Publisher<D, #enum_master>, Box<dyn ::std::error::Error>> {
                 match topic {
                     #(#pub_arms,)*
                 }
             }
-            #[doc = "Get a [`crosstalk::Subscriber`] for the given topic"]
+            
+            #[doc = " Get a [`crosstalk::Subscriber`] for the given topic"]
             #[doc = ""]
-            #[doc = "See [`crosstalk::BoundedNode::subscriber`] for more information"]
+            #[doc = " See [`crosstalk::BoundedNode::subscriber`] for more information"]
             fn subscriber<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<::crosstalk::Subscriber<D, #enum_master>, Box<dyn ::std::error::Error>> {
                 match topic {
                     #(#sub_arms,)*
                 }
             }
-            #[doc = "Get a [`crosstalk::Publisher`] and [`crosstalk::Subscriber`] for the given topic"]
+            
+            #[doc = " Get a [`crosstalk::Publisher`] and [`crosstalk::Subscriber`] for the given topic"]
             #[doc = ""]
-            #[doc = "See [`crosstalk::BoundedNode::pubsub`] for more information"]
+            #[doc = " See [`crosstalk::BoundedNode::pubsub`] for more information"]
             fn pubsub<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(::crosstalk::Publisher<D, #enum_master>, ::crosstalk::Subscriber<D, #enum_master>), Box<dyn ::std::error::Error>> {
                 match self.publisher(topic) {
                     Ok(publisher) => {
@@ -371,14 +335,16 @@ pub fn init(input: TokenStream) -> TokenStream {
                     Err(err) => Err(err),
                 }
             }
-            #[doc = "Delete a [`crosstalk::Publisher`] for the given topic"]
+            
+            #[doc = " Delete a [`crosstalk::Publisher`] for the given topic"]
             #[doc = ""]
-            #[doc = "See [`crosstalk::BoundedNode::delete_publisher`] for more information"]
-            fn delete_publisher<D: 'static>(&mut self, _publisher: ::crosstalk::Publisher<D, #enum_master>) {}
-            #[doc = "Delete a [`crosstalk::Subscriber`] for the given topic"]
+            #[doc = " See [`crosstalk::BoundedNode::delete_publisher`] for more information"]
+            fn delete_publisher<D: 'static>(&self, publisher: ::crosstalk::Publisher<D, #enum_master>) {}
+
+            #[doc = " Delete a [`crosstalk::Subscriber`] for the given topic"]
             #[doc = ""]
-            #[doc = "See [`crosstalk::BoundedNode::delete_subscriber`] for more information"]
-            fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: ::crosstalk::Subscriber<D, #enum_master>) {}
+            #[doc = " See [`crosstalk::BoundedNode::delete_subscriber`] for more information"]
+            fn delete_subscriber<D: Clone + Send + 'static>(&self, subscriber: ::crosstalk::Subscriber<D, #enum_master>) {}
         }
     };
 
@@ -454,40 +420,4 @@ pub fn derive_enum_as_topic(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
-}
-
-#[deprecated]
-/// This function is not expected to be used
-fn _type2fish(ty: &Type) -> TokenStream2 {
-    match ty {
-        Type::Path(type_path) => {
-            let mut tokens = TokenStream2::new();
-            for (i, segment) in type_path.path.segments.iter().enumerate() {
-                if i > 0 {
-                    tokens.extend(quote!(::));
-                }
-                let ident = &segment.ident;
-                tokens.extend(quote!(#ident));
-                match &segment.arguments {
-                    PathArguments::AngleBracketed(args) => {
-                        let args_tokens: Vec<TokenStream2> = args.args.iter().map(|arg| {
-                            match arg {
-                                GenericArgument::Type(ty) => _type2fish(ty),
-                                // Extend this match to handle other GenericArgument variants as needed
-                                _ => quote!(#arg),
-                            }
-                        }).collect();
-                        if !args_tokens.is_empty() {
-                            tokens.extend(quote!(::<#(#args_tokens),*>));
-                        }
-                    },
-                    // Handle other PathArguments variants if necessary
-                    _ => {}
-                }
-            }
-            tokens
-        },
-        // Extend this match to handle other Type variants as needed
-        _ => quote!(#ty),
-    }
 }

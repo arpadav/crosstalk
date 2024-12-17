@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk-macros"
-version = "0.2.7"
+version = "0.3.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "Procedural macros for crosstalk — An extremely lightweight, topic-based, cross-thread, in-memory communication library"
@@ -17,9 +17,9 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"
-syn = { version = "2.0", features = ["extra-traits", "full"] }
 
 [profile.dev]
 opt-level = 0
