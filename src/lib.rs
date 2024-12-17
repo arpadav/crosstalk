@@ -1,80 +1,4 @@
-//! # crosstalk
-//! 
-//! A lightweight wrapper of [tokio](https://crates.io/crates/tokio)'s bounded broadcasting channels to enable topic-based (publisher/subscriber) paradigm of mpmc communication.
-//! 
-//! ```rust
-//! #![allow(dead_code)]
-//! 
-//! use std::thread;
-//! use std::collections::HashMap;
-//! use crosstalk::AsTopic;
-//! 
-//! #[derive(AsTopic)] // required for crosstalk topic
-//! enum TopicZoo {
-//!     Topic1,
-//!     Topic2,
-//!     Topic3,
-//!     Topic4,
-//!     Topic5,
-//!     Topic6,
-//! }
-//! 
-//! #[derive(Clone)] // required for crosstalk data
-//! #[derive(PartialEq, Debug)]
-//! struct Vehicle {
-//!     make: String,
-//!     model: String,
-//!     color: Color,
-//!     wheels: u8,
-//! }
-//! 
-//! #[derive(Clone)] // required for crosstalk data
-//! #[derive(PartialEq, Debug)]
-//! enum Color {
-//!     Red,
-//!     Blue,
-//!     Green
-//! }
-//! 
-//! crosstalk::init! {
-//!     TopicZoo::Topic1 => Vec<u32>,
-//!     TopicZoo::Topic2 => String,
-//!     TopicZoo::Topic3 => Vehicle,
-//!     TopicZoo::Topic4 => HashMap<&str, Vec<Vehicle>>,
-//!     TopicZoo::Topic5 => Color,
-//! }
-//! // TopicZoo::Topic6 not included: defaults to String
-//! 
-//! fn main() {
-//!     let mut node = crosstalk::BoundedNode::<TopicZoo>::new(1024);
-//! 
-//!     let (pub0_topic5, mut sub0_topic5) = node
-//!         .pubsub(TopicZoo::Topic5)
-//!         .unwrap();
-//!     let mut sub1_topic5 = node
-//!         .subscriber(TopicZoo::Topic5)
-//!         .unwrap();
-//! 
-//!     let message = Color::Red;
-//! 
-//!     thread::spawn(move || { pub0_topic5.write(message); });
-//! 
-//!     let received_0 = sub0_topic5.read_blocking();
-//!     let received_1 = sub1_topic5.read_blocking();
-//! 
-//!     println!("{:?}", received_0);
-//!     println!("{:?}", received_1);
-//!     assert_eq!(received_0, received_1);
-//! }
-//! ```
-//! 
-//! ## Why crosstalk?
-//! 
-//! Most mpmc libraries focuses on a single FIFO channel, rather than broadcasting. [Tokio](https://crates.io/crates/tokio) is one of the only established mpmc / async libraries that supports broadcasting, so the motivation was to wrap `tokio`'s channels with a topic-based paradigm, similar to ROS, for ease of use. Crosstalk acts as a lightweight wrapper of `tokio::sync::broadcast`, correlating topic enums with datatypes and senders/receivers. Crosstalk can be used to dynamically create and destroy publishers and subscribers at runtime, across multiple threads. 
-//! 
-//! ## License
-//! 
-//! Crosstalk is released under the MIT license [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
+#![doc = include_str!("../README.md")]
 // --------------------------------------------------
 // external
 // --------------------------------------------------
@@ -84,9 +8,9 @@ use std::{
         Mutex,
     },
     any::Any,
+    hash::Hash,
+    collections::HashMap,
 };
-use core::hash::Hash;
-use hashbrown::HashMap;
 
 // --------------------------------------------------
 // internal
@@ -154,7 +78,7 @@ pub struct BoundedNode<T> {
     pub node: Arc<Mutex<ImplementedBoundedNode<T>>>,
     pub size: usize,
 }
-/// Implements [`BoundedNode`]
+/// [`BoundedNode`] implementation 
 /// 
 /// This holds an [`Arc<Mutex<ImplementedBoundedNode<T>>>`], which
 /// references the true (private) node that implements the [`AsTopic`] trait.
@@ -383,7 +307,7 @@ where
     /// }
     /// ```
     pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
-        let mut n = self.node.lock().unwrap();
+        let n = self.node.lock().unwrap();
         n.delete_publisher(_publisher)
     }
 
@@ -422,11 +346,10 @@ where
     /// }
     /// ```
     pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>) {
-        let mut n = self.node.lock().unwrap();
+        let n = self.node.lock().unwrap();
         n.delete_subscriber(subscriber)
     }
 }
-
 
 /// The inner implementation of the node,
 /// which implements the [`AsTopic`] trait
@@ -436,19 +359,18 @@ where
 /// # Attributes
 /// 
 /// * `senders` - the senders of the node
-/// * `runtimes` - the [`tokio`] runtimes of the node
-/// * `create_runtimes` - whether to create runtimes
 /// * `size` - the size of each buffer
 pub struct ImplementedBoundedNode<T> {
     pub senders: HashMap<T, Box<dyn Any + 'static>>,
-    pub runtimes: HashMap<T, Arc<tokio::runtime::Runtime>>,
-    pub create_runtimes: bool,
     pub size: usize,
 }
-/// Implements [`Send`](std::marker::Send) and [`Sync`](std::marker::Sync) for [`ImplementedBoundedNode`].
+
+/// [`ImplementedBoundedNode`] implementation of [`Send`]
 unsafe impl<T> Send for ImplementedBoundedNode<T> {}
+/// [`ImplementedBoundedNode`] implementation of [`Sync`]
 unsafe impl<T> Sync for ImplementedBoundedNode<T> {}
-/// Implements [`ImplementedBoundedNode`]
+
+/// [`ImplementedBoundedNode`] implementation 
 impl<T> ImplementedBoundedNode<T>
 where
     T: CrosstalkTopic,
@@ -461,8 +383,6 @@ where
     pub fn new(size: usize) -> Self {
         Self {
             senders: HashMap::new(),
-            runtimes: HashMap::new(),
-            create_runtimes: tokio::runtime::Handle::try_current().is_err(),
             size: size,
         }
     }
@@ -545,7 +465,6 @@ impl<D, T> Publisher<D, T> {
 /// * `topic` - the topic of the subscriber
 /// * `rcvr` - the receiver of the subscriber
 /// * `sndr` - the sender for the topic. This is used to spawn multiple receivers upon [`Subscriber::clone`]
-/// * `rt` - the [`tokio`] runtime of the subscriber
 /// 
 /// # Type Parameters
 /// 
@@ -560,9 +479,8 @@ pub struct Subscriber<D, T> {
     pub topic: T,
     rcvr: Receiver<D>,
     sndr: Arc<tokio::sync::broadcast::Sender<D>>,
-    rt: Option<Arc<tokio::runtime::Runtime>>,
 }
-/// Implements [`Subscriber`]
+/// [`Subscriber`] implementation 
 impl<D: Clone, T: Clone> Subscriber<D, T> {
     #[inline]
     /// See [`BoundedNode::subscriber`]
@@ -570,28 +488,11 @@ impl<D: Clone, T: Clone> Subscriber<D, T> {
         topic: T,
         rcvr: Option<tokio::sync::broadcast::Receiver<D>>,
         sndr: Arc<tokio::sync::broadcast::Sender<D>>,
-        rt: Option<Arc<tokio::runtime::Runtime>>,
     ) -> Self {
-        let rcvr = rcvr.unwrap_or(sndr.subscribe());
-        match rt {
-            Some(rt) => Self {
-                topic: topic,
-                rcvr: Receiver::new(
-                    rcvr,
-                    Some(rt.clone()),
-                ),
-                sndr: sndr.clone(),
-                rt: Some(rt),
-            },
-            None => Self {
-                topic: topic,
-                rcvr: Receiver::new(
-                    rcvr,
-                    None,
-                ),
-                sndr: sndr.clone(),
-                rt: None,
-            },
+        Self {
+            topic: topic,
+            rcvr: Receiver::new(rcvr.unwrap_or(sndr.subscribe())),
+            sndr: sndr.clone(),
         }
     }
 
@@ -630,12 +531,8 @@ impl<D: Clone, T: Clone> Subscriber<D, T> {
     pub fn clone(&self) -> Self {
         Self {
             topic: self.topic.clone(),
-            rcvr: Receiver::new(
-                self.sndr.subscribe(),
-                self.rt.clone(),
-            ),
+            rcvr: Receiver::new(self.sndr.subscribe()),
             sndr: self.sndr.clone(),
-            rt: self.rt.clone(),
         }
     }
 
@@ -835,12 +732,6 @@ impl<D: Clone, T: Clone> Subscriber<D, T> {
     pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
         self.rcvr.read_timeout(timeout).await
     }
-
-    #[inline]
-    #[deprecated]
-    pub fn set_timeout(&mut self, timeout: std::time::Duration) {
-        self.rcvr.set_timeout(timeout);
-    }
 }
 
 
@@ -848,12 +739,11 @@ impl<D: Clone, T: Clone> Subscriber<D, T> {
 /// 
 /// Define a receiver for subscribing messages
 /// 
-/// Reads from tokio::sync::broadcast::Receiver
+/// Reads from [`tokio::sync::broadcast::Receiver`]
 pub struct Receiver<D> {
     buf: tokio::sync::broadcast::Receiver<D>,
-    rt: Option<Arc<tokio::runtime::Runtime>>,
-    timeout: std::time::Duration,
 }
+/// [`Receiver`] implementation
 impl<D> Receiver<D>
 where
     D: Clone
@@ -861,35 +751,31 @@ where
     #[inline]
     pub fn new(
         buf: tokio::sync::broadcast::Receiver<D>,
-        rt: Option<Arc<tokio::runtime::Runtime>>,
     ) -> Self {
-        let timeout = std::time::Duration::from_millis(10);
-        Self {
-            buf: buf,
-            rt: rt,
-            timeout: timeout,
-        }
+        Self { buf }
     }
 
     #[inline]
-    /// Reads from [`tokio::sync::broadcast::Receiver`] after
-    /// entering a [`tokio::runtime::Runtime`]
+    /// Reads from [`tokio::sync::broadcast::Receiver`]
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::read`]
     pub async fn read(&mut self) -> Option<D> {
-        let _guard = match self.rt {
-            Some(ref rt) => Some(rt.enter()),
-            None => None,
-        };
         loop {
             match self.buf.recv().await {
                 Ok(res) => return Some(res),
                 Err(e) => match e {
                     tokio::sync::broadcast::error::RecvError::Lagged(_) => { continue; }
+
+                    #[cfg(not(any(feature = "log", feature = "tracing")))]
+                    _ => return None,
+
+                    #[cfg(any(feature = "log", feature = "tracing"))]
                     _ => {
-                        // TODO: improve this error
-                        log::error!("Some RecvError: {:?}", e);
+                        #[cfg(feature = "log")]
+                        log::error!("{}", e);
+                        #[cfg(feature = "tracing")]
+                        tracing::error!("{}", e);
                         return None
                     }
                 }
@@ -898,23 +784,29 @@ where
     }    
 
     #[inline]
-    /// Reads from [`tokio::sync::broadcast::Receiver`] after
-    /// entering a [`tokio::runtime::Runtime`]
+    /// Reads from [`tokio::sync::broadcast::Receiver`]
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::try_read`]
     pub fn try_read(&mut self) -> Option<D> {
-        let _guard = match self.rt {
-            Some(ref rt) => Some(rt.enter()),
-            None => None,
-        };
         loop {
             match self.buf.try_recv() {
                 Ok(d) => return Some(d),
                 Err(e) => {
                     match e {
                         tokio::sync::broadcast::error::TryRecvError::Lagged(_) => { continue; },
+
+                        #[cfg(not(any(feature = "log", feature = "tracing")))]
                         _ => return None,
+
+                        #[cfg(any(feature = "log", feature = "tracing"))]
+                        _ => {
+                            #[cfg(feature = "log")]
+                            log::error!("{}", e);
+                            #[cfg(feature = "tracing")]
+                            tracing::error!("{}", e);
+                            return None
+                        },
                     }
                 },
             }
@@ -922,96 +814,114 @@ where
     }
     
     #[inline]
-    /// Reads from [`tokio::sync::broadcast::Receiver`] after
-    /// entering a [`tokio::runtime::Runtime`]
+    /// Reads from [`tokio::sync::broadcast::Receiver`]
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::try_read_raw`]
     pub fn try_read_raw(&mut self) -> Option<D> {
-        let _guard = match self.rt {
-            Some(ref rt) => Some(rt.enter()),
-            None => None,
-        };
         match self.buf.try_recv() {
             Ok(d) => Some(d),
+
+            #[cfg(not(any(feature = "log", feature = "tracing")))]
             Err(_) => None,
-        }
-    }
-    
-    #[inline]
-    /// Reads from [`tokio::sync::broadcast::Receiver`] after
-    /// entering a [`tokio::runtime::Runtime`]
-    /// 
-    /// This struct/function is not meant to be used directly,
-    /// rather through the [`Subscriber`] struct with [`Subscriber::read_blocking`]
-    pub fn read_blocking(&mut self) -> Option<D> {
-        let _guard = match self.rt {
-            Some(ref rt) => Some(rt.enter()),
-            None => None,
-        };
-        loop {
-            match self.buf.blocking_recv() {
-                Ok(res) => return Some(res),
-                Err(e) => match e {
-                    tokio::sync::broadcast::error::RecvError::Lagged(_) => { continue; }
-                    _ => {
-                        // TODO: improve this error
-                        log::error!("Some RecvError: {:?}", e);
-                        return None
-                    }
-                }
-            }
-        }
-    }
-    
-    #[inline]
-    /// Reads from [`tokio::sync::broadcast::Receiver`] after
-    /// entering a [`tokio::runtime::Runtime`]
-    /// 
-    /// This struct/function is not meant to be used directly,
-    /// rather through the [`Subscriber`] struct with [`Subscriber::read_timeout`]
-    pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
-        let _guard = match self.rt {
-            Some(ref rt) => Some(rt.enter()),
-            None => None,
-        };
-        match tokio::runtime::Handle::try_current() {
-            Ok(_) => {
-                match tokio::time::timeout(timeout, self.buf.recv()).await {
-                    Ok(res) => {
-                        match res {
-                            Ok(res) => Some(res),
-                            Err(e) => {
-                                // TODO: improve this error
-                                log::error!("Some RecvError: {:?}", e);
-                                None
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        // TODO: improve this error
-                        log::error!("Timeout error occurred: {:?}", e);
-                        None
-                    }
-                }
-            },
+            
+            #[cfg(any(feature = "log", feature = "tracing"))]
             Err(e) => {
-                // TODO: improve this error
-                log::error!("Tokio runtime is said to be running, but can not find current handle: {:?}", e);
+                #[cfg(feature = "log")]
+                log::error!("{}", e);
+                #[cfg(feature = "tracing")]
+                tracing::error!("{}", e);
                 None
             },
         }
     }
     
     #[inline]
-    /// This function is no longer in use
-    pub fn set_timeout(&mut self, timeout: std::time::Duration) {
-        self.timeout = timeout;
+    /// Reads from [`tokio::sync::broadcast::Receiver`]
+    /// 
+    /// This struct/function is not meant to be used directly,
+    /// rather through the [`Subscriber`] struct with [`Subscriber::read_blocking`]
+    pub fn read_blocking(&mut self) -> Option<D> {
+        loop {
+            match self.buf.blocking_recv() {
+                Ok(res) => return Some(res),
+                Err(e) => match e {
+                    tokio::sync::broadcast::error::RecvError::Lagged(_) => { continue; }
+                    
+                    #[cfg(not(any(feature = "log", feature = "tracing")))]
+                    _ => return None,
+
+                    #[cfg(any(feature = "log", feature = "tracing"))]
+                    _ => {
+                        #[cfg(feature = "log")]
+                        log::error!("{}", e);
+                        #[cfg(feature = "tracing")]
+                        tracing::error!("{}", e);
+                        return None
+                    },
+                }
+            }
+        }
+    }
+    
+    #[inline]
+    /// Reads from [`tokio::sync::broadcast::Receiver`]
+    /// 
+    /// This struct/function is not meant to be used directly,
+    /// rather through the [`Subscriber`] struct with [`Subscriber::read_timeout`]
+    pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
+        match tokio::runtime::Handle::try_current() {
+            Ok(_) => {
+                match tokio::time::timeout(timeout, self.buf.recv()).await {
+                    Ok(res) => {
+                        match res {
+                            Ok(res) => Some(res),
+
+                            #[cfg(not(any(feature = "log", feature = "tracing")))]
+                            Err(_) => None,
+                            
+                            #[cfg(any(feature = "log", feature = "tracing"))]
+                            Err(e) => {
+                                #[cfg(feature = "log")]
+                                log::error!("{}", e);
+                                #[cfg(feature = "tracing")]
+                                tracing::error!("{}", e);
+                                None
+                            },
+                        }
+                    },
+
+                    #[cfg(not(any(feature = "log", feature = "tracing")))]
+                    Err(_) => None,
+                    
+                    #[cfg(any(feature = "log", feature = "tracing"))]
+                    Err(e) => {
+                        #[cfg(feature = "log")]
+                        log::error!("{}", e);
+                        #[cfg(feature = "tracing")]
+                        tracing::error!("{}", e);
+                        None
+                    },
+                }
+            },
+
+            #[cfg(not(any(feature = "log", feature = "tracing")))]
+            Err(_) => None,
+            
+            #[cfg(any(feature = "log", feature = "tracing"))]
+            Err(e) => {
+                #[cfg(feature = "log")]
+                log::error!("{}", e);
+                #[cfg(feature = "tracing")]
+                tracing::error!("{}", e);
+                None
+            },
+        }
     }
 }
 
 #[derive(Debug)]
-/// `crosstalk` errors
+/// [`crosstalk`](crate) errors
 pub enum Error {
     PublisherMismatch(String, String),
     SubscriberMismatch(String, String),
@@ -1031,16 +941,17 @@ pub trait CrosstalkTopic: Eq + Hash + Copy + Clone + PartialEq {}
 /// A trait to define a [`CrosstalkPubSub`]
 /// 
 /// This is used to implement the [`CrosstalkPubSub`] trait
-/// using the [`crosstalk_macros::init`] macro
+/// using the [`crosstalk_macros::init!`] macro
 /// for the [`ImplementedBoundedNode`] struct
 /// 
-/// This is not meant to be used directly
+/// This is not meant to be used directly, and is automatically
+/// implemented when calling [`crosstalk_macros::init!`]
 pub trait CrosstalkPubSub<T> {
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
     fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>>;
     fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
-    fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>);
-    fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>);
+    fn delete_publisher<D: 'static>(&self, publisher: Publisher<D, T>);
+    fn delete_subscriber<D: Clone + Send + 'static>(&self, subscriber: Subscriber<D, T>);
 }
 
 #[inline]
@@ -1065,42 +976,5 @@ where
     match buf.downcast::<T>() {
         Ok(t) => Ok(*t),
         Err(e) => Err(e),
-    }
-}
-
-/// Converts a [`Result`]<_, `E`> (where `E` implements [`std::error::Error`]) into a [`Result`]<_, [`Box`]<[`dyn`][`std::error::Error`]` + 'static`>>
-pub trait BoxResult2Result<T, E> {
-    fn boxed(self) -> Result<T, Box<dyn std::error::Error>>;
-}
-/// Implements the [`BoxResult2Result`] trait for all [`std::error::Error`] types.
-impl <T, E: std::error::Error + 'static> BoxResult2Result<T, E> for Result<T, E> {
-    /// Converts into a [`Box`] and wraps it in a [`Result`].
-    /// 
-    /// # Arguments
-    /// 
-    /// * [`self`] - The datatype that implements [`std::error::Error`] to be wrapped in a [`Box`].
-    /// 
-    /// # Returns
-    /// 
-    /// The converted [`Result`]<(), [`Box`]<[`dyn`][`std::error::Error`]` + 'static`>>.
-    /// 
-    /// # Example
-    /// 
-    /// TODO fix this example
-    /// 
-    /// ```ignore
-    /// use crosstalk::BoxResult2Result;
-    /// use std::error::Error;
-    /// 
-    /// fn main() -> Result<(), Box<dyn Error>> {
-    ///     let result = Error::from("some error".to_string());
-    ///     let boxed_error = result.boxed();
-    ///     assert_eq!(result, Err(boxed_error.unwrap_err()));
-    ///     assert_eq!(boxed_error.unwrap_err().to_string(), "some error");
-    ///     boxed_error
-    /// }
-    /// ```
-    fn boxed(self) -> Result<T, Box<dyn std::error::Error>> {
-        self.map_err(|e| e.into())
     }
 }
