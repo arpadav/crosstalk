@@ -1,3 +1,4 @@
+#![doc(html_root_url = "https://docs.rs/crosstalk/0.3")]
 #![doc = include_str!("../README.md")]
 // --------------------------------------------------
 // external

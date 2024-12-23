@@ -1,3 +1,4 @@
+#![doc(html_root_url = "https://docs.rs/crosstalk-macros/0.3")]
 //! Macros for [`crosstalk`](https://crates.io/crates/crosstalk)
 //! 
 //! ## License
