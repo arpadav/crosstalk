@@ -134,6 +134,7 @@ where
     }
 
     #[inline]
+    #[deprecated(since = "0.3.3", note = "This function will be replaced by `publisher_blocking` in crosstalk v1.0. `publisher` will become async. Both `publisher_*` functions will return a `Result` with return error type `crosstalk::Error`")]
     /// Creates a new publisher for the given topic `T`
     /// 
     /// # Arguments
@@ -182,6 +183,7 @@ where
     }
 
     #[inline]
+    #[deprecated(since = "0.3.3", note = "This function will be replaced by `subscriber_blocking` in crosstalk v1.0. `subscriber` will become async. Both `subscriber_*` functions will return a `Result` with return error type `crosstalk::Error`")]
     /// Creates a new subscriber for the given topic `T`
     /// 
     /// # Arguments
@@ -230,6 +232,7 @@ where
     }
 
     #[inline]
+    #[deprecated(since = "0.3.3", note = "This function will be replaced by `pubsub_blocking` in crosstalk v1.0. `pubsub` will become async. Both `pubsub_*` functions will return a `Result` with return error type `crosstalk::Error`")]
     /// Creates a new publisher and subscriber for the given topic `T`
     /// 
     /// # Arguments
@@ -274,6 +277,7 @@ where
     }
 
     #[inline]
+    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the publisher will achieve the same result")]
     /// Deletes a publisher
     /// 
     /// # Arguments
@@ -313,6 +317,7 @@ where
     }
 
     #[inline]
+    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the subscriber will achieve the same result")]
     /// Deletes a subscriber
     /// 
     /// # Arguments
@@ -951,7 +956,9 @@ pub trait CrosstalkPubSub<T> {
     fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, Box<dyn std::error::Error>>;
     fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, Box<dyn std::error::Error>>;
     fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), Box<dyn std::error::Error>>;
+    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the publisher will achieve the same result")]
     fn delete_publisher<D: 'static>(&self, publisher: Publisher<D, T>);
+    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the subscriber will achieve the same result")]
     fn delete_subscriber<D: Clone + Send + 'static>(&self, subscriber: Subscriber<D, T>);
 }
 
