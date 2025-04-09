@@ -860,7 +860,7 @@ impl<D: Clone> Receiver<D>{
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::read`]
-    pub async fn read(&mut self) -> Option<D> {
+    async fn read(&mut self) -> Option<D> {
         loop {
             match self.buf.recv().await {
                 Ok(res) => return Some(res),
@@ -887,7 +887,7 @@ impl<D: Clone> Receiver<D>{
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::try_read`]
-    pub fn try_read(&mut self) -> Option<D> {
+    fn try_read(&mut self) -> Option<D> {
         loop {
             match self.buf.try_recv() {
                 Ok(d) => return Some(d),
@@ -916,7 +916,7 @@ impl<D: Clone> Receiver<D>{
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::try_read_raw`]
-    pub fn try_read_raw(&mut self) -> Option<D> {
+    fn try_read_raw(&mut self) -> Option<D> {
         match self.buf.try_recv() {
             Ok(d) => Some(d),
 
@@ -938,7 +938,7 @@ impl<D: Clone> Receiver<D>{
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::read_blocking`]
-    pub fn read_blocking(&mut self) -> Option<D> {
+    fn read_blocking(&mut self) -> Option<D> {
         loop {
             match self.buf.blocking_recv() {
                 Ok(res) => return Some(res),
@@ -965,7 +965,7 @@ impl<D: Clone> Receiver<D>{
     /// 
     /// This struct/function is not meant to be used directly,
     /// rather through the [`Subscriber`] struct with [`Subscriber::read_timeout`]
-    pub async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
+    async fn read_timeout(&mut self, timeout: std::time::Duration) -> Option<D> {
         match tokio::runtime::Handle::try_current() {
             Ok(_) => {
                 match tokio::time::timeout(timeout, self.buf.recv()).await {
