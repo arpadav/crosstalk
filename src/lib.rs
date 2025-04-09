@@ -12,6 +12,12 @@ use tokio::sync::broadcast::{
 };
 
 // --------------------------------------------------
+// local
+// --------------------------------------------------
+pub use crosstalk_macros::init;
+pub use crosstalk_macros::AsTopic;
+
+// --------------------------------------------------
 // re-exports
 // --------------------------------------------------
 pub mod __macro_exports {
@@ -44,12 +50,6 @@ pub mod __macro_exports {
     }
 }
 
-// --------------------------------------------------
-// local
-// --------------------------------------------------
-pub use crosstalk_macros::init;
-pub use crosstalk_macros::AsTopic;
-
 /// A trait bound an enum as a [`CrosstalkTopic`]
 pub trait CrosstalkTopic: Eq + Copy + Clone + PartialEq + std::hash::Hash {}
 
@@ -57,6 +57,41 @@ pub trait CrosstalkTopic: Eq + Copy + Clone + PartialEq + std::hash::Hash {}
 pub trait CrosstalkData: Clone + Send + 'static {}
 /// [`CrosstalkData`] implementation for all types
 impl<T: Clone + Send + 'static> CrosstalkData for T {}
+
+#[derive(Copy, Clone, Debug)]
+/// [`crosstalk`](crate) errors
+pub enum Error {
+    PublisherMismatch(&'static str, &'static str),
+    SubscriberMismatch(&'static str, &'static str),
+}
+/// [`crosstalk::Error`](crate::Error) implementation of [`std::error::Error`]
+impl std::error::Error for Error {}
+/// [`crosstalk::Error`](crate::Error) implementation of [`std::fmt::Display`]
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::PublisherMismatch(input, output) => write!(f, "Publisher type mismatch: {} (cast) != {} (expected)", input, output),
+            Error::SubscriberMismatch(input, output) => write!(f, "Subscriber type mismatch: {} (cast) != {} (expected)", input, output),
+        }
+    }
+}
+
+/// A trait to define a [`CrosstalkPubSub`]
+/// 
+/// This is used to implement the [`CrosstalkPubSub`] trait
+/// using the [`crosstalk_macros::init!`] macro
+/// for the [`ImplementedBoundedNode`] struct
+/// 
+/// This is not meant to be used directly, and is automatically
+/// implemented when calling [`crosstalk_macros::init!`]
+pub trait CrosstalkPubSub<T> {
+    fn publisher<D: CrosstalkData>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error>;
+    
+    fn subscriber<D: CrosstalkData>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error>;
+    
+    #[allow(clippy::type_complexity)]
+    fn pubsub<D: CrosstalkData>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error>;
+}
 
 #[derive(Clone)]
 /// A [`BoundedNode`] is a node to spawn publishers and
@@ -485,7 +520,7 @@ pub struct Publisher<D, T> {
     pub topic: T,
     buf: TokioSender<D>,
 }
-/// Implements [`Publisher`]
+/// [`Publisher`] implementation
 impl<D, T> Publisher<D, T> {
     #[inline(always)]
     /// See [`BoundedNode::publisher`]
@@ -808,7 +843,7 @@ impl<D: Clone, T: Clone> Clone for Subscriber<D, T> {
 /// Define a receiver for subscribing messages
 /// 
 /// Reads from [`TokioReceiver`]
-pub struct Receiver<D> {
+struct Receiver<D> {
     buf: TokioReceiver<D>,
 }
 /// [`Receiver`] implementation
@@ -979,41 +1014,6 @@ impl<D: Clone> Receiver<D>{
             },
         }
     }
-}
-
-#[derive(Copy, Clone, Debug)]
-/// [`crosstalk`](crate) errors
-pub enum Error {
-    PublisherMismatch(&'static str, &'static str),
-    SubscriberMismatch(&'static str, &'static str),
-}
-/// [`crosstalk::Error`](crate::Error) implementation of [`std::error::Error`]
-impl std::error::Error for Error {}
-/// [`crosstalk::Error`](crate::Error) implementation of [`std::fmt::Display`]
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::PublisherMismatch(input, output) => write!(f, "Publisher type mismatch: {} (cast) != {} (expected)", input, output),
-            Error::SubscriberMismatch(input, output) => write!(f, "Subscriber type mismatch: {} (cast) != {} (expected)", input, output),
-        }
-    }
-}
-
-/// A trait to define a [`CrosstalkPubSub`]
-/// 
-/// This is used to implement the [`CrosstalkPubSub`] trait
-/// using the [`crosstalk_macros::init!`] macro
-/// for the [`ImplementedBoundedNode`] struct
-/// 
-/// This is not meant to be used directly, and is automatically
-/// implemented when calling [`crosstalk_macros::init!`]
-pub trait CrosstalkPubSub<T> {
-    fn publisher<D: CrosstalkData>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error>;
-    
-    fn subscriber<D: CrosstalkData>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error>;
-    
-    #[allow(clippy::type_complexity)]
-    fn pubsub<D: CrosstalkData>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error>;
 }
 
 // --------------------------------------------------
