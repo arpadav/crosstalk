@@ -340,7 +340,7 @@ fn benchmark_t1_1p0s__only_string(c: &mut Criterion) {
     c.bench_function("t1_1p0s__only_string", |b| {
         let mut node = unode__only_string();
         let msg = black_box("Hello World".to_string());
-        let p = node.publisher::<String>(TopicZoo::Topic1).unwrap();
+        let p = node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap();
         b.iter(|| {
             write(&p, black_box(msg.clone()))
         });
@@ -354,8 +354,8 @@ fn benchmark_t1_1p1s__only_string(c: &mut Criterion) {
         b.iter(|| {
             let mut node = black_box(unode__only_string());
             let msg = black_box("Hello World".to_string());
-            let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
-            let s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+            let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
+            let s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
             transmit_once__1p1s(p, s, black_box(msg.clone()));
         });
         
@@ -368,10 +368,10 @@ fn benchmark_t1_1pms__only_string(c: &mut Criterion) {
         b.iter(|| {
             let mut node = black_box(unode__only_string());
             let msg = black_box("Hello World".to_string());
-            let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
+            let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
             let mut ss = black_box(Vec::new());
             for _ in 0..NUM_SUBSCRIBERS {
-                let s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+                let s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ss.push(s));
             }
             transmit_once__1pms(p, ss, black_box(msg.clone()));
@@ -388,10 +388,10 @@ fn benchmark_t1_mp1s__only_string(c: &mut Criterion) {
             let msg = black_box("Hello World".to_string());
             let mut ps = black_box(Vec::new());
             for _ in 0..NUM_PUBLISHERS {
-                let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
+                let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ps.push(p));
             }
-            let s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+            let s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
             transmit_once__mp1s(ps, s, black_box(msg.clone()));
         });        
     });
@@ -405,12 +405,12 @@ fn benchmark_t1_mpms__only_string(c: &mut Criterion) {
             let msg = black_box("Hello World".to_string());
             let mut ps = black_box(Vec::new());
             for _ in 0..NUM_PUBLISHERS {
-                let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
+                let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ps.push(p));
             }
             let mut ss = black_box(Vec::new());
             for _ in 0..NUM_SUBSCRIBERS {
-                let s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+                let s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ss.push(s));
             }
             transmit_once__mpms(ps, ss, black_box(msg.clone()));
@@ -423,7 +423,7 @@ fn benchmark_tm_1p0s__only_string(c: &mut Criterion) {
     c.bench_function("tm_1p0s__only_string", |b| {
         let mut node = unode__only_string();
         let msgs = black_box(vec!["Hello World".to_string(); NUM_MESSAGES]);
-        let p = node.publisher::<String>(TopicZoo::Topic1).unwrap();
+        let p = node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap();
         b.iter(|| {
             push__1p(&p, black_box(msgs.clone()));
         });
@@ -436,8 +436,8 @@ fn benchmark_tm_1p1s__only_string(c: &mut Criterion) {
         b.iter(|| {
             let mut node = black_box(unode__only_string());
             let msgs = black_box(vec!["Hello World".to_string(); NUM_MESSAGES]);
-            let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
-            let mut s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+            let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
+            let mut s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
             transmit_many__1p1s(&p, &mut s, black_box(msgs.clone()));
         });
     });
@@ -449,10 +449,10 @@ fn benchmark_tm_1pms__only_string(c: &mut Criterion) {
         b.iter(|| {
             let mut node = black_box(unode__only_string());
             let msgs = black_box(vec!["Hello World".to_string(); NUM_MESSAGES]);
-            let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
+            let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
             let mut ss = black_box(Vec::new());
             for _ in 0..NUM_SUBSCRIBERS {
-                let s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+                let s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ss.push(s));
             }
             transmit_many__1pms(&p, ss, black_box(msgs.clone()));
@@ -468,10 +468,10 @@ fn benchmark_tm_mp1s__only_string(c: &mut Criterion) {
             let msgs = black_box(vec!["Hello World".to_string(); NUM_MESSAGES]);
             let mut ps = black_box(Vec::new());
             for _ in 0..NUM_PUBLISHERS {
-                let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
+                let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ps.push(p));
             }
-            let mut s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+            let mut s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
             transmit_many__mp1s(ps, &mut s, black_box(msgs.clone()));
         });
     });
@@ -485,12 +485,12 @@ fn benchmark_tm_mpms__only_string(c: &mut Criterion) {
             let msgs = black_box(vec!["Hello World".to_string(); NUM_MESSAGES]);
             let mut ps = black_box(Vec::new());
             for _ in 0..NUM_PUBLISHERS {
-                let p = black_box(node.publisher::<String>(TopicZoo::Topic1).unwrap());
+                let p = black_box(node.publisher_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ps.push(p));
             }
             let mut ss = black_box(Vec::new());
             for _ in 0..NUM_SUBSCRIBERS {
-                let s = black_box(node.subscriber::<String>(TopicZoo::Topic1).unwrap());
+                let s = black_box(node.subscriber_blocking::<String>(TopicZoo::Topic1).unwrap());
                 black_box(ss.push(s));
             }
             transmit_many__mpms(ps, ss, black_box(msgs.clone()));

@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk-macros"
-version = "0.3.3"
+version = "1.0.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "Procedural macros for crosstalk — An extremely lightweight, topic-based, cross-thread, in-memory communication library"
@@ -9,9 +9,7 @@ documentation = "https://docs.rs/crosstalk-macros"
 readme = "README.md"
 keywords = ["thread", "channel", "mpmc", "async", "distributed"]
 categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2024"
 
 [lib]
 proc-macro = true
@@ -20,13 +18,3 @@ proc-macro = true
 syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"
-
-[profile.dev]
-opt-level = 0
-
-[profile.release]
-lto = true
-strip = true
-opt-level = 3
-panic = "abort"
-codegen-units = 1

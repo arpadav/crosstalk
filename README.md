@@ -50,22 +50,25 @@ crosstalk::init! {
 }
 // TopicZoo::Topic6 not included: defaults to String
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut node = crosstalk::BoundedNode::<TopicZoo>::new(1024);
 
     let (pub0_topic5, mut sub0_topic5) = node
         .pubsub(TopicZoo::Topic5)
+        .await
         .unwrap();
     let mut sub1_topic5 = node
         .subscriber(TopicZoo::Topic5)
+        .await
         .unwrap();
 
     let message = Color::Red;
 
     thread::spawn(move || { pub0_topic5.write(message); });
 
-    let received_0 = sub0_topic5.read_blocking();
-    let received_1 = sub1_topic5.read_blocking();
+    let received_0 = sub0_topic5.read().await;
+    let received_1 = sub1_topic5.read().await;
 
     println!("{:?}", received_0);
     println!("{:?}", received_1);
@@ -75,7 +78,7 @@ fn main() {
 
 ## Why crosstalk?
 
-Most mpmc libraries focuses on a single FIFO channel, rather than broadcasting. [Tokio](https://crates.io/crates/tokio) is one of the only established mpmc / async libraries that supports broadcasting, so the motivation was to wrap `tokio`'s channels with a topic-based paradigm, similar to ROS, for ease of use. Crosstalk acts as a lightweight wrapper of `tokio::sync::broadcast`, correlating topic enums with datatypes and senders/receivers. Crosstalk can be used to dynamically create and destroy publishers and subscribers at runtime, across multiple threads. 
+Most mpmc libraries focuses on a single FIFO channel, rather than broadcasting. [Tokio](https://crates.io/crates/tokio) is one of the only established mpmc / async libraries that supports broadcasting, so the motivation was to wrap `tokio`'s channels with a topic-based paradigm, similar to ROS, for ease of use. Crosstalk acts as a lightweight wrapper of `tokio::sync::broadcast`, correlating topic enums with datatypes and senders/receivers. Crosstalk can be used to dynamically create and destroy publishers and subscribers at runtime, across multiple threads.
 
 ## License
 
