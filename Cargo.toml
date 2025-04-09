@@ -1,6 +1,6 @@
 [package]
 name = "crosstalk"
-version = "0.3.2"
+version = "1.0.0"
 authors = ["Arpad Voros <arpadav@gmail.com>"]
 license = "MIT"
 description = "An extremely lightweight, topic-based, cross-thread, in-memory communication library"
@@ -9,37 +9,56 @@ documentation = "https://docs.rs/crosstalk"
 readme = "README.md"
 keywords = ["thread", "channel", "mpmc", "async", "distributed"]
 categories = ["concurrency", "algorithms", "data-structures", "memory-management", "aerospace"]
-edition = "2021"
+edition = "2024"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# --------------------------------------------------
+# features
+# --------------------------------------------------
+[features]
+default = []
+log = ["dep:log"]
+tracing = ["dep:tracing"]
 
+# --------------------------------------------------
+# dependencies
+# --------------------------------------------------
 [dependencies]
-crosstalk-macros = "0.3.2"
-log = { version = "0.4", optional = true}
+crosstalk-macros = "1.0.0"
+tokio = { version = "1.44", features = [
+    "sync",
+    "time",
+    "rt-multi-thread",
+] }
+# --------------------------------------------------
+# optional dependencies
+# --------------------------------------------------
+log = { version = "0.4", optional = true }
 tracing = { version = "0.1", optional = true }
-tokio = { version = "1.42", features = ["sync", "time", "rt-multi-thread"] }
 
+# --------------------------------------------------
+# dev dependencies
+# --------------------------------------------------
 [dev-dependencies]
 futures = "0.3"
-criterion = { version = "0.5", features = ["html_reports"] }
-tokio = { version = "1.42", features = ["macros", "sync", "time", "rt-multi-thread"] }
+criterion = { version = "0.5", features = [
+    "html_reports"
+] }
+tokio = { version = "1.44", features = [
+    "sync",
+    "time",
+    "macros",
+    "rt-multi-thread",
+] }
 
+# --------------------------------------------------
+# patches
+# --------------------------------------------------
+[patch.crates-io]
+crosstalk-macros = { path = "macros" }
+
+# --------------------------------------------------
+# bench marking (criterion)
+# --------------------------------------------------
 [[bench]]
 name = "test"
 harness = false
-
-[patch.crates-io]
-crosstalk-macros = { path = "crosstalk-macros" }
-
-[features]
-default = []
-
-[profile.dev]
-opt-level = 0
-
-[profile.release]
-lto = true
-strip = true
-opt-level = 3
-panic = "abort"
-codegen-units = 1
