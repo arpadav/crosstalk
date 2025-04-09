@@ -162,7 +162,7 @@ fn init_inner(input: TokenStream, source: TokenStream2) -> TokenStream {
             #[doc = " Get a [`crosstalk::Publisher`] for the given topic"]
             #[doc = ""]
             #[doc = " See [`crosstalk::BoundedNode::publisher`] for more information"]
-            fn publisher<D: 'static>(&mut self, topic: #enum_master) -> Result<#source Publisher<D, #enum_master>, #source Error> {
+            fn publisher<D: #source CrosstalkData>(&mut self, topic: #enum_master) -> Result<#source Publisher<D, #enum_master>, #source Error> {
                 match topic {
                     #(#pub_arms,)*
                 }
@@ -171,7 +171,7 @@ fn init_inner(input: TokenStream, source: TokenStream2) -> TokenStream {
             #[doc = " Get a [`crosstalk::Subscriber`] for the given topic"]
             #[doc = ""]
             #[doc = " See [`crosstalk::BoundedNode::subscriber`] for more information"]
-            fn subscriber<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<#source Subscriber<D, #enum_master>, #source Error> {
+            fn subscriber<D: #source CrosstalkData>(&mut self, topic: #enum_master) -> Result<#source Subscriber<D, #enum_master>, #source Error> {
                 match topic {
                     #(#sub_arms,)*
                 }
@@ -181,7 +181,7 @@ fn init_inner(input: TokenStream, source: TokenStream2) -> TokenStream {
             #[doc = " Get a [`crosstalk::Publisher`] and [`crosstalk::Subscriber`] for the given topic"]
             #[doc = ""]
             #[doc = " See [`crosstalk::BoundedNode::pubsub`] for more information"]
-            fn pubsub<D: Clone + Send + 'static>(&mut self, topic: #enum_master) -> Result<(#source Publisher<D, #enum_master>, #source Subscriber<D, #enum_master>), #source Error> {
+            fn pubsub<D: #source CrosstalkData>(&mut self, topic: #enum_master) -> Result<(#source Publisher<D, #enum_master>, #source Subscriber<D, #enum_master>), #source Error> {
                 match (self.publisher(topic), self.subscriber(topic)) {
                     (Ok(publisher), Ok(subscriber)) => Ok((publisher, subscriber)),
                     (Err(err), _) => Err(err),

@@ -50,6 +50,14 @@ pub mod __macro_exports {
 pub use crosstalk_macros::init;
 pub use crosstalk_macros::AsTopic;
 
+/// A trait bound an enum as a [`CrosstalkTopic`]
+pub trait CrosstalkTopic: Eq + Copy + Clone + PartialEq + std::hash::Hash {}
+
+/// A trait to bound a datatype as a [`CrosstalkData`]
+pub trait CrosstalkData: Clone + Send + 'static {}
+/// [`CrosstalkData`] implementation for all types
+impl<T: Clone + Send + 'static> CrosstalkData for T {}
+
 #[derive(Clone)]
 /// A [`BoundedNode`] is a node to spawn publishers and
 /// subscribers on, where the size of each buffer is
@@ -211,7 +219,7 @@ where
     ///     assert!(node.publisher::<String>(House::Bedroom).await.is_ok());
     /// }
     /// ```
-    pub async fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error> {
+    pub async fn publisher<D: CrosstalkData>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error> {
         self.node.lock().await.publisher(topic)
     }
 
@@ -249,7 +257,7 @@ where
     /// let mut node = crosstalk::BoundedNode::<House>::new(10);
     /// assert!(node.publisher_blocking::<String>(House::Bedroom).is_ok());
     /// ```
-    pub fn publisher_blocking<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error> {
+    pub fn publisher_blocking<D: CrosstalkData>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error> {
         self.node.blocking_lock().publisher(topic)
     }
 
@@ -290,7 +298,7 @@ where
     ///     assert!(node.subscriber::<String>(House::Bedroom).await.is_ok());
     /// }
     /// ```
-    pub async fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error> {
+    pub async fn subscriber<D: CrosstalkData>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error> {
         self.node.lock().await.subscriber(topic)
     }
 
@@ -328,7 +336,7 @@ where
     /// let mut node = crosstalk::BoundedNode::<House>::new(10);
     /// assert!(node.subscriber_blocking::<String>(House::Bedroom).is_ok());
     /// ```
-    pub fn subscriber_blocking<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error> {
+    pub fn subscriber_blocking<D: CrosstalkData>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error> {
         self.node.blocking_lock().subscriber(topic)
     }
 
@@ -372,7 +380,7 @@ where
     /// }
     /// ```
     /// 
-    pub async fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error> {
+    pub async fn pubsub<D: CrosstalkData>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error> {
         self.node.lock().await.pubsub(topic)
     }
 
@@ -414,7 +422,7 @@ where
     /// assert_eq!(subscriber.try_read().unwrap(), "hello");
     /// ```
     /// 
-    pub fn pubsub_blocking<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error> {
+    pub fn pubsub_blocking<D: CrosstalkData>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error> {
         self.node.blocking_lock().pubsub(topic)
     }
 }
@@ -795,7 +803,6 @@ impl<D: Clone, T: Clone> Clone for Subscriber<D, T> {
     }
 }
 
-
 /// Receiver
 /// 
 /// Define a receiver for subscribing messages
@@ -992,14 +999,6 @@ impl std::fmt::Display for Error {
     }
 }
 
-/// A trait bound an enum as a [`CrosstalkTopic`]
-pub trait CrosstalkTopic: Eq + Copy + Clone + PartialEq + std::hash::Hash {}
-
-/// A trait to bound a datatype as a [`CrosstalkData`]
-pub trait CrosstalkData: Clone + Send + 'static {}
-/// [`CrosstalkData`] implementation for all types
-impl<T: Clone + Send + 'static> CrosstalkData for T {}
-
 /// A trait to define a [`CrosstalkPubSub`]
 /// 
 /// This is used to implement the [`CrosstalkPubSub`] trait
@@ -1009,12 +1008,12 @@ impl<T: Clone + Send + 'static> CrosstalkData for T {}
 /// This is not meant to be used directly, and is automatically
 /// implemented when calling [`crosstalk_macros::init!`]
 pub trait CrosstalkPubSub<T> {
-    fn publisher<D: 'static>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error>;
+    fn publisher<D: CrosstalkData>(&mut self, topic: T) -> Result<Publisher<D, T>, crate::Error>;
     
-    fn subscriber<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error>;
+    fn subscriber<D: CrosstalkData>(&mut self, topic: T) -> Result<Subscriber<D, T>, crate::Error>;
     
     #[allow(clippy::type_complexity)]
-    fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error>;
+    fn pubsub<D: CrosstalkData>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error>;
 }
 
 // --------------------------------------------------
