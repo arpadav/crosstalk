@@ -189,20 +189,6 @@ fn init_inner(input: TokenStream, source: TokenStream2) -> TokenStream {
                     _ => unreachable!(),
                 }
             }
-            
-            #[inline(always)]
-            #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the publisher will achieve the same result")]
-            #[doc = " Delete a [`crosstalk::Publisher`] for the given topic"]
-            #[doc = ""]
-            #[doc = " See [`crosstalk::BoundedNode::delete_publisher`] for more information"]
-            fn delete_publisher<D: 'static>(&self, publisher: #source Publisher<D, #enum_master>) {}
-
-            #[inline(always)]
-            #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the subscriber will achieve the same result")]
-            #[doc = " Delete a [`crosstalk::Subscriber`] for the given topic"]
-            #[doc = ""]
-            #[doc = " See [`crosstalk::BoundedNode::delete_subscriber`] for more information"]
-            fn delete_subscriber<D: Clone + Send + 'static>(&self, subscriber: #source Subscriber<D, #enum_master>) {}
         }
     };
 

@@ -417,80 +417,6 @@ where
     pub fn pubsub_blocking<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error> {
         self.node.blocking_lock().pubsub(topic)
     }
-
-    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the publisher will achieve the same result")]
-    #[inline(always)]
-    /// Deletes a publisher
-    /// 
-    /// # Arguments
-    /// 
-    /// * `publisher` - the publisher to delete
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use crosstalk::AsTopic;
-    ///
-    /// #[derive(AsTopic)]
-    /// enum House {
-    ///     Bedroom,
-    ///     LivingRoom,
-    ///     Kitchen,
-    ///     Bathroom,
-    /// }
-    ///
-    /// crosstalk::init! {
-    ///     House::Bedroom => String,
-    ///     House::LivingRoom => String,
-    ///     House::Kitchen => Vec<f32>,
-    ///     House::Bathroom => u8,
-    /// }
-    ///
-    /// let mut node = crosstalk::BoundedNode::<House>::new(10);
-    /// let publisher = node.publisher_blocking::<String>(House::Bedroom).unwrap();
-    /// node.delete_publisher(publisher);
-    /// ```
-    pub fn delete_publisher<D: 'static>(&mut self, _publisher: Publisher<D, T>) {
-        let n = self.node.blocking_lock();
-        n.delete_publisher(_publisher)
-    }
-
-    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the subscriber will achieve the same result")]
-    #[inline(always)]
-    /// Deletes a subscriber
-    /// 
-    /// # Arguments
-    /// 
-    /// * `subscriber` - the subscriber to delete
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use crosstalk::AsTopic;
-    ///
-    /// #[derive(AsTopic)]
-    /// enum House {
-    ///     Bedroom,
-    ///     LivingRoom,
-    ///     Kitchen,
-    ///     Bathroom,
-    /// }
-    ///
-    /// crosstalk::init! {
-    ///     House::Bedroom => String,
-    ///     House::LivingRoom => String,
-    ///     House::Kitchen => Vec<f32>,
-    ///     House::Bathroom => u8,
-    /// }
-    ///
-    /// let mut node = crosstalk::BoundedNode::<House>::new(10);
-    /// let subscriber = node.subscriber_blocking::<String>(House::Bedroom).unwrap();
-    /// node.delete_subscriber(subscriber);
-    /// ```
-    pub fn delete_subscriber<D: Clone + Send + 'static>(&mut self, subscriber: Subscriber<D, T>) {
-        let n = self.node.blocking_lock();
-        n.delete_subscriber(subscriber)
-    }
 }
 
 /// The inner implementation of the node,
@@ -1089,12 +1015,6 @@ pub trait CrosstalkPubSub<T> {
     
     #[allow(clippy::type_complexity)]
     fn pubsub<D: Clone + Send + 'static>(&mut self, topic: T) -> Result<(Publisher<D, T>, Subscriber<D, T>), crate::Error>;
-
-    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the publisher will achieve the same result")]
-    fn delete_publisher<D: 'static>(&self, publisher: Publisher<D, T>);
-    
-    #[deprecated(since = "0.3.3", note = "This function will be removed in crosstalk v1.0. Dropping the subscriber will achieve the same result")]
-    fn delete_subscriber<D: Clone + Send + 'static>(&self, subscriber: Subscriber<D, T>);
 }
 
 // --------------------------------------------------
